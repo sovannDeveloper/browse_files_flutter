@@ -36,6 +36,24 @@ class ThumbnailCache {
   final Map<String, Future<Uint8List?>> _inFlight =
       <String, Future<Uint8List?>>{};
 
+  /// Notifies listeners (tiles) whenever the cache contents change — a new
+  /// entry lands, an existing one is touched, or [clear] drops everything.
+  /// Tiles listen so a prefetch that did not originate from their own
+  /// [_load] still repaints them when the bytes arrive.
+  ///
+  /// Subclassed so its protected [ChangeNotifier.notifyListeners] is callable
+  /// from the cache's own methods; we deliberately do not make the cache
+  /// itself a [ChangeNotifier] so the public surface stays focused on cache
+  /// operations.
+  final _ChangeSource _changes = _ChangeSource();
+
+  /// Fires after every mutation of the entry map.
+  ///
+  /// Tiles subscribe in `initState` and unsubscribe in `dispose`. The
+  /// notification is cheap — no payload — so a listener that does not care
+  /// about the just-stored id can simply re-peek and decide.
+  Listenable get changes => _changes;
+
   BrowseFilesFlutterPlatform get _api =>
       _platform ?? BrowseFilesFlutterPlatform.instance;
 
@@ -99,6 +117,7 @@ class ThumbnailCache {
   void clear() {
     _entries.clear();
     _inFlight.clear();
+    _changes.notifyListeners();
   }
 
   void _store(String key, Uint8List? bytes) {
@@ -107,7 +126,26 @@ class ThumbnailCache {
     while (_entries.length > capacity) {
       _entries.remove(_entries.keys.first);
     }
+    _changes.notifyListeners();
+  }
+
+  /// Releases the change notifier. Call when the cache itself is being torn
+  /// down; the static [shared] instance lives for the process and is not
+  /// disposed.
+  void dispose() {
+    _changes.dispose();
   }
 
   String _keyOf(String id, int width, int height) => '$id@${width}x$height';
+}
+
+/// Thin [ChangeNotifier] that exposes [notifyListeners] to the enclosing
+/// cache, which is not itself a [ChangeNotifier]. A private subclass is the
+/// canonical way to call the protected method from outside the file's
+/// hierarchy.
+class _ChangeSource extends ChangeNotifier {
+  /// Allow [ThumbnailCache] to fire notifications without going through the
+  /// protected API.
+  @override
+  void notifyListeners() => super.notifyListeners();
 }

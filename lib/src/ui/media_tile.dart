@@ -63,7 +63,28 @@ class _MediaTileState extends State<MediaTile> {
       width: widget.thumbnailSize,
       height: widget.thumbnailSize,
     );
+    // A prefetch started elsewhere (the grid, a sibling tile) can land in the
+    // cache without our `_load` ever firing; the listener picks that up.
+    widget.cache.changes.addListener(_onCacheChange);
     if (_bytes == null) _load();
+  }
+
+  @override
+  void dispose() {
+    widget.cache.changes.removeListener(_onCacheChange);
+    super.dispose();
+  }
+
+  void _onCacheChange() {
+    if (_bytes != null || _failed || _missing) return;
+    final bytes = widget.cache.peek(
+      widget.item.id,
+      width: widget.thumbnailSize,
+      height: widget.thumbnailSize,
+    );
+    if (bytes == null) return;
+    if (!mounted) return;
+    setState(() => _bytes = bytes);
   }
 
   @override
@@ -150,8 +171,9 @@ class _MediaTileState extends State<MediaTile> {
     return _placeholder(theme);
   }
 
-  /// The cell before its thumbnail arrives: bare while the platform is still
-  /// working, marked once it has answered with nothing.
+  /// The cell before its thumbnail arrives: a small spinner while the
+  /// platform is still working, a marked icon once it has answered with
+  /// nothing.
   Widget _placeholder(ThemeData theme) {
     final icon = _failed
         ? Icons.broken_image_outlined
@@ -159,8 +181,20 @@ class _MediaTileState extends State<MediaTile> {
     return ColoredBox(
       color: theme.colorScheme.surfaceContainerHighest,
       child: icon == null
-          ? null
-          : Icon(icon, color: theme.colorScheme.onSurfaceVariant, size: 20),
+          ? const Center(
+              child: SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            )
+          : Center(
+              child: Icon(
+                icon,
+                color: theme.colorScheme.onSurfaceVariant,
+                size: 20,
+              ),
+            ),
     );
   }
 }
