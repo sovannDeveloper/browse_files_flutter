@@ -28,6 +28,9 @@ class AttachmentTabBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // A single tab needs no bar — the sheet's content already names what it
+    // is, and a row of one would just duplicate that label.
+    if (tabs.length <= 1) return const SizedBox.shrink();
     final scheme = Theme.of(context).colorScheme;
     return Container(
       margin: const EdgeInsets.fromLTRB(8, 4, 8, 8),

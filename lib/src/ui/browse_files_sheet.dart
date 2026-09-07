@@ -5,9 +5,11 @@ import '../models/attachment_tab.dart';
 import '../models/browse_files_exception.dart';
 import '../models/browse_files_options.dart';
 import '../models/browse_files_result.dart';
+import '../models/document_item.dart';
 import '../models/media_item.dart';
 import 'attachment_tab_bar.dart';
 import 'browse_files_page.dart';
+import 'document_list.dart';
 import 'media_grid.dart';
 import 'thumbnail_cache.dart';
 
@@ -39,6 +41,7 @@ class BrowseFiles {
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: Colors.transparent,
+
       builder: (context) => BrowseFilesSheet(options: options, cache: cache),
     );
   }
@@ -92,20 +95,30 @@ class BrowseFilesSheet extends StatefulWidget {
 }
 
 class _BrowseFilesSheetState extends State<BrowseFilesSheet> {
-  /// The selection, in the order it was picked — that order is what the
-  /// numbered tiles and the send order mean.
-  final List<MediaItem> _selected = <MediaItem>[];
+  /// The selection on each axis — the cap counts across both, like the page.
+  final List<MediaItem> _media = <MediaItem>[];
+  final List<DocumentItem> _documents = <DocumentItem>[];
+
+  /// The two lists need their own scroll controllers: two scrollables sharing
+  /// the primary one would fight over it mid-swipe.
+  final ScrollController _mediaScroll = ScrollController();
+  final ScrollController _documentScroll = ScrollController();
 
   late String _tabId = _initialTabId;
 
   ThemeData? _theme;
   Object? _themeKey;
-  bool _pickingDocuments = false;
-  String? _documentError;
+
+  bool _resolving = false;
+  String? _error;
 
   BrowseFilesOptions get _options => widget.options;
 
   ThumbnailCache get _cache => widget.cache ?? ThumbnailCache.shared;
+
+  int get _count => _media.length + _documents.length;
+
+  bool get _canSelectMore => _count < _options.maxSelection;
 
   /// The tab to open on, ignoring an `initialTabId` that names no tab.
   String get _initialTabId =>
@@ -121,48 +134,61 @@ class _BrowseFilesSheetState extends State<BrowseFilesSheet> {
     orElse: () => AttachmentTab.gallery,
   );
 
-  void _toggle(MediaItem item) {
+  @override
+  void dispose() {
+    _mediaScroll.dispose();
+    _documentScroll.dispose();
+    super.dispose();
+  }
+
+  void _toggleMedia(MediaItem item) {
     setState(() {
-      if (_selected.remove(item)) return;
-      if (_selected.length >= _options.maxSelection) return;
-      _selected.add(item);
+      if (_media.remove(item)) return;
+      if (!_canSelectMore) return;
+      _media.add(item);
     });
   }
 
-  void _confirm() {
-    Navigator.of(
-      context,
-    ).pop(BrowseFilesResult(media: List<MediaItem>.unmodifiable(_selected)));
+  void _toggleDocument(DocumentItem item) {
+    setState(() {
+      if (_documents.remove(item)) return;
+      if (!_canSelectMore) return;
+      _documents.add(item);
+    });
   }
 
-  /// Hands the File tab straight to the system picker: browsing storage
-  /// ourselves would mean re-implementing the file manager, and SAF already
-  /// is one.
-  Future<void> _pickDocuments() async {
+  /// Documents were picked *as* files — copy the ones that are still platform
+  /// handles out to the cache so the host app gets readable paths back.
+  Future<void> _confirm() async {
     setState(() {
-      _pickingDocuments = true;
-      _documentError = null;
+      _resolving = true;
+      _error = null;
     });
+    final paths = <String>[];
     try {
-      final paths = await BrowseFilesFlutterPlatform.instance.pickDocuments(
-        mimeTypes: _options.documentMimeTypes,
-        allowMultiple: _options.allowMultipleDocuments,
-      );
-      if (!mounted) return;
-      setState(() => _pickingDocuments = false);
-      if (paths.isEmpty) return;
-      if (!mounted) return;
-      Navigator.of(
-        context,
-      ).pop(BrowseFilesResult(documents: List<String>.unmodifiable(paths)));
+      for (final document in _documents) {
+        paths.add(
+          document.path ??
+              await BrowseFilesFlutterPlatform.instance.resolveFile(
+                document.id,
+              ),
+        );
+      }
     } on BrowseFilesException catch (error) {
       if (!mounted) return;
       setState(() {
-        _pickingDocuments = false;
-        // Backing out of the picker is a normal outcome, not a failure.
-        _documentError = error.isCancellation ? null : error.message;
+        _resolving = false;
+        _error = error.message;
       });
+      return;
     }
+    if (!mounted) return;
+    Navigator.of(context).pop(
+      BrowseFilesResult(
+        media: List<MediaItem>.unmodifiable(_media),
+        documents: List<String>.unmodifiable(paths),
+      ),
+    );
   }
 
   /// The sheet's own theme, so a host app can hand it Telegram's dark chrome
@@ -235,18 +261,34 @@ class _BrowseFilesSheetState extends State<BrowseFilesSheet> {
                 top: Radius.circular(16),
               ),
             ),
-            child: Column(
+            child: Stack(
               children: [
-                const _DragHandle(),
-                Expanded(child: _body(scrollController, theme)),
-                if (_selected.isNotEmpty) _confirmBar(theme),
-                SafeArea(
-                  top: false,
-                  child: AttachmentTabBar(
-                    tabs: _options.tabs,
-                    activeId: _tabId,
-                    barColor: _barColor(theme),
-                    onSelected: (tab) => setState(() => _tabId = tab.id),
+                Column(
+                  children: [
+                    const _DragHandle(),
+                    Expanded(child: _body(scrollController, theme)),
+                  ],
+                ),
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  child: SafeArea(
+                    top: false,
+                    child: Column(
+                      children: [
+                        Center(
+                          child: AttachmentTabBar(
+                            tabs: _options.tabs,
+                            activeId: _tabId,
+                            barColor: _barColor(theme),
+                            onSelected: (tab) =>
+                                setState(() => _tabId = tab.id),
+                          ),
+                        ),
+                        if (_count > 0) _confirmBar(theme),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -264,72 +306,66 @@ class _BrowseFilesSheetState extends State<BrowseFilesSheet> {
         key: const ValueKey<String>('browse-files-gallery'),
         options: _options,
         cache: _cache,
-        selection: _selected,
-        onToggle: _toggle,
+        selection: _media,
+        onToggle: _toggleMedia,
         scrollController: scrollController,
-        canSelectMore: _selected.length < _options.maxSelection,
+        canSelectMore: _canSelectMore,
+      );
+    }
+    if (tab.id == AttachmentTab.fileId && tab.isBuiltIn) {
+      return DocumentList(
+        key: const ValueKey<String>('browse-files-file'),
+        options: _options,
+        selection: _documents,
+        onToggle: _toggleDocument,
+        scrollController: scrollController,
+        canSelectMore: _canSelectMore,
       );
     }
     final builder = tab.builder;
+    if (builder == null) {
+      // An empty tab row falls through to the gallery branch above; this only
+      // runs for unknown ids the host passed through `initialTabId`.
+      return const SizedBox.shrink();
+    }
     return _Fill(
       key: ValueKey<String>('browse-files-${tab.id}'),
       scrollController: scrollController,
-      child: builder != null ? builder(context) : _fileTab(theme),
+      child: builder(context),
     );
   }
 
-  Widget _fileTab(ThemeData theme) {
-    final error = _documentError;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          spacing: 8,
-          children: [
-            Icon(
-              Icons.folder_open_outlined,
-              size: 32,
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-            Text('Files', style: theme.textTheme.titleMedium),
-            Text(
+  Widget _confirmBar(ThemeData theme) {
+    final error = _error;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
               error ??
-                  'Pick documents with the system file picker. They are copied '
-                      'into this app before you get a path back.',
-              textAlign: TextAlign.center,
+                  '${_media.length} media · ${_documents.length} files '
+                      '(max ${_options.maxSelection})',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: error == null ? null : theme.colorScheme.error,
               ),
             ),
-            FilledButton(
-              onPressed: _pickingDocuments ? null : _pickDocuments,
-              child: Text(_pickingDocuments ? 'Opening…' : 'Browse files'),
-            ),
-          ],
-        ),
+          ),
+          FilledButton.icon(
+            onPressed: _resolving ? null : _confirm,
+            icon: _resolving
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.send, size: 16),
+            label: Text('${_options.confirmLabel} ($_count)'),
+          ),
+        ],
       ),
     );
   }
-
-  Widget _confirmBar(ThemeData theme) => Padding(
-    padding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
-    child: Row(
-      children: [
-        Expanded(
-          child: Text(
-            '${_selected.length} of ${_options.maxSelection} selected',
-            style: theme.textTheme.bodySmall,
-          ),
-        ),
-        FilledButton.icon(
-          onPressed: _confirm,
-          icon: const Icon(Icons.send, size: 16),
-          label: Text('${_options.confirmLabel} (${_selected.length})'),
-        ),
-      ],
-    ),
-  );
 }
 
 /// Makes a non-scrolling tab body drag the sheet like the grid does.

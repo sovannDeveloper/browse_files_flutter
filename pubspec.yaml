@@ -3,6 +3,7 @@ description: "A Telegram-style attachment bottom sheet for Flutter: browse devic
 version: 0.0.1
 homepage: https://github.com/kedtec/browse_files_flutter
 repository: https://github.com/kedtec/browse_files_flutter
+publish_to: none
 
 environment:
   sdk: ^3.10.8
@@ -12,6 +13,8 @@ dependencies:
   flutter:
     sdk: flutter
   plugin_platform_interface: ^2.0.2
+  division:
+    git: https://github.com/sovannDeveloper/division.git
 
 dev_dependencies:
   flutter_test:

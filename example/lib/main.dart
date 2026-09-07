@@ -140,6 +140,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         accentColor: const Color(0xFF2CB5A0),
         pageSize: 20,
         onCameraTap: _capture,
+        types: {MediaType.image},
+        tabs: [AttachmentTab.gallery, AttachmentTab.file],
       ),
     );
     if (!mounted) return;
