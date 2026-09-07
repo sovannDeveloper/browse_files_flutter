@@ -202,9 +202,7 @@ class _MediaGridState extends State<MediaGrid> with WidgetsBindingObserver {
       } else {
         _append(page.items);
       }
-      // A short page is the end of the library, whatever the total says; and a
-      // total below what is already loaded would leave the grid asking for a
-      // page that never comes.
+
       _total = page.items.length < widget.options.pageSize
           ? _items.length
           : (page.total > _items.length ? page.total : _items.length);
