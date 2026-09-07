@@ -17,7 +17,7 @@ class BrowseFilesOptions {
     this.pageSize = 50,
     this.thumbnailSize = 256,
     this.peekSize = 0.55,
-    this.confirmLabel = 'Send',
+    this.confirmLabel = 'Select',
     this.documentMimeTypes = const <String>[],
     this.allowMultipleDocuments = true,
     this.onCameraTap,

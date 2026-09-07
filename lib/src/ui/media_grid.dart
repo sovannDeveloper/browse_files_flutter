@@ -278,7 +278,12 @@ class _MediaGridState extends State<MediaGrid> with WidgetsBindingObserver {
     final leading = hasCamera ? 1 : 0;
     return GridView.builder(
       controller: widget.scrollController,
-      padding: EdgeInsets.zero,
+      padding: EdgeInsets.only(
+        left: 0,
+        right: 0,
+        top: 0,
+        bottom: MediaQuery.of(context).padding.bottom + 100,
+      ),
       // Build a couple of rows past the viewport so their thumbnails are asked
       // for before they are scrolled into view, rather than after.
       cacheExtent: 600,

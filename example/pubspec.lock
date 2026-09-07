@@ -56,6 +56,15 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.9"
+  division:
+    dependency: transitive
+    description:
+      path: "."
+      ref: HEAD
+      resolved-ref: f8f2011f74378e59818e6558a217993a147765cb
+      url: "https://github.com/sovannDeveloper/division.git"
+    source: git
+    version: "0.8.8"
   fake_async:
     dependency: transitive
     description:
