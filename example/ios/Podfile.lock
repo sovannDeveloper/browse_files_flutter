@@ -1,0 +1,34 @@
+PODS:
+  - browse_files_flutter (0.0.1):
+    - Flutter
+  - flu_wake_lock (0.0.1):
+    - Flutter
+  - Flutter (1.0.0)
+  - integration_test (0.0.1):
+    - Flutter
+
+DEPENDENCIES:
+  - browse_files_flutter (from `.symlinks/plugins/browse_files_flutter/ios`)
+  - flu_wake_lock (from `.symlinks/plugins/flu_wake_lock/ios`)
+  - Flutter (from `Flutter`)
+  - integration_test (from `.symlinks/plugins/integration_test/ios`)
+
+EXTERNAL SOURCES:
+  browse_files_flutter:
+    :path: ".symlinks/plugins/browse_files_flutter/ios"
+  flu_wake_lock:
+    :path: ".symlinks/plugins/flu_wake_lock/ios"
+  Flutter:
+    :path: Flutter
+  integration_test:
+    :path: ".symlinks/plugins/integration_test/ios"
+
+SPEC CHECKSUMS:
+  browse_files_flutter: 37a3a3c2d663b861829f7d1b174eab47e2ff1242
+  flu_wake_lock: 6df04b4230d37188ba58f09a820e54acc1966ff3
+  Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
+  integration_test: 4a889634ef21a45d28d50d622cf412dc6d9f586e
+
+PODFILE CHECKSUM: 3c63482e143d1b91d2d2560aee9fb04ecc74ac7e
+
+COCOAPODS: 1.16.2
