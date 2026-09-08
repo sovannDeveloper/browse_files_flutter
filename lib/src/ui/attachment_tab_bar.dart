@@ -1,3 +1,4 @@
+import 'package:division/division.dart';
 import 'package:flutter/material.dart';
 
 import '../models/attachment_tab.dart';
@@ -32,16 +33,16 @@ class OCAttachmentTabBar extends StatelessWidget {
     // is, and a row of one would just duplicate that label.
     if (tabs.length <= 1) return const SizedBox.shrink();
     final scheme = Theme.of(context).colorScheme;
-    return Container(
-      margin: const EdgeInsets.fromLTRB(8, 4, 8, 8),
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: barColor ?? scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(26),
-      ),
+    final barStyle = ParentStyle()
+      ..margin(left: 8, top: 4, right: 8, bottom: 8)
+      ..padding(all: 6)
+      ..borderRadius(all: 100)
+      ..background.color(barColor ?? scheme.surfaceContainerHighest)
+      ..overflow.hidden();
+    return Parent(
+      style: barStyle,
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.all(6),
         child: Row(
           children: [
             for (final tab in tabs)
@@ -77,7 +78,7 @@ class _TabButton extends StatelessWidget {
     final badge = tab.badge;
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(100),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         width: 78,
@@ -104,7 +105,7 @@ class _TabButton extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: 10,
                 color: color,
                 fontWeight: active ? FontWeight.w600 : FontWeight.w400,
               ),

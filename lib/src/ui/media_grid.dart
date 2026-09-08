@@ -773,7 +773,15 @@ class _Centered extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Center(
-    child: Padding(padding: const EdgeInsets.all(24), child: child),
+    child: Padding(
+      padding: EdgeInsets.only(
+        left: 24,
+        top: 24,
+        right: 24,
+        bottom: MediaQuery.of(context).padding.bottom + 80,
+      ),
+      child: child,
+    ),
   );
 }
 

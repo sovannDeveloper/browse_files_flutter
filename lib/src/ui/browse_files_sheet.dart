@@ -278,23 +278,19 @@ class _BrowseFilesSheetState extends State<BrowseFilesSheet> {
                     top: false,
                     child: Column(
                       children: [
-                        Material(
-                          color: Colors.transparent,
-                          elevation: 2,
-                          child: Center(
-                            child: Column(
-                              children: [
-                                if (_count <= 0)
-                                  OCAttachmentTabBar(
-                                    tabs: _options.tabs,
-                                    activeId: _tabId,
-                                    barColor: _barColor(theme),
-                                    onSelected: (tab) =>
-                                        setState(() => _tabId = tab.id),
-                                  ),
-                                if (_count > 0) _confirmBar(theme),
-                              ],
-                            ),
+                        Center(
+                          child: Column(
+                            children: [
+                              if (_count <= 0)
+                                OCAttachmentTabBar(
+                                  tabs: _options.tabs,
+                                  activeId: _tabId,
+                                  barColor: _barColor(theme),
+                                  onSelected: (tab) =>
+                                      setState(() => _tabId = tab.id),
+                                ),
+                              if (_count > 0) _confirmBar(theme),
+                            ],
                           ),
                         ),
                       ],
@@ -351,7 +347,7 @@ class _BrowseFilesSheetState extends State<BrowseFilesSheet> {
       style: ParentStyle()
         ..background.color(_barColor(theme))
         ..margin(horizontal: 16, bottom: 10)
-        ..borderRadius(all: 16)
+        ..borderRadius(all: 106)
         ..padding(left: 16, top: 4, right: 8, bottom: 4)
         ..elevation(3, opacity: .5),
       child: Row(
