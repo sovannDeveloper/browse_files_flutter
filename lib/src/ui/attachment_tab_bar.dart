@@ -76,42 +76,39 @@ class _TabButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = active ? scheme.primary : scheme.onSurfaceVariant;
     final badge = tab.badge;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(100),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        width: 78,
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        decoration: BoxDecoration(
-          color: active
-              ? scheme.primary.withValues(alpha: 0.16)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          spacing: 4,
-          children: [
-            Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Icon(tab.icon, size: 24, color: color),
-                if (badge != null) Positioned(right: -5, top: -3, child: badge),
-              ],
+    return Parent(
+      style: ParentStyle()
+        ..width(78)
+        ..padding(vertical: 8)
+        ..borderRadius(all: 100)
+        ..ripple(true)
+        ..background.color(
+          active ? scheme.primary.withValues(alpha: 0.16) : Colors.transparent,
+        )
+        ..animate(150, Curves.easeOut),
+      gesture: Gestures()..onTap(onTap),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        spacing: 4,
+        children: [
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Icon(tab.icon, size: 24, color: color),
+              if (badge != null) Positioned(right: -5, top: -3, child: badge),
+            ],
+          ),
+          Text(
+            tab.label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 10,
+              color: color,
+              fontWeight: active ? FontWeight.w600 : FontWeight.w400,
             ),
-            Text(
-              tab.label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 10,
-                color: color,
-                fontWeight: active ? FontWeight.w600 : FontWeight.w400,
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
