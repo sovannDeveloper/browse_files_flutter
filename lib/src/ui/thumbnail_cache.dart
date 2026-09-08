@@ -10,22 +10,24 @@ import '../browse_files_flutter_platform_interface.dart';
 /// same assets constantly, so the bytes are kept — but only [capacity] of
 /// them. Holding every thumbnail a long scroll touches is how a picker runs
 /// out of memory.
-class ThumbnailCache {
+class OCThumbnailCache {
   /// Creates a cache holding at most [capacity] thumbnails.
   ///
   /// [platform] exists for tests; production uses whatever
-  /// [BrowseFilesFlutterPlatform.instance] is at call time.
-  ThumbnailCache({this.capacity = 256, BrowseFilesFlutterPlatform? platform})
-    : assert(capacity > 0, 'a cache of nothing is not a cache'),
-      _platform = platform;
+  /// [OCBrowseFilesFlutterPlatform.instance] is at call time.
+  OCThumbnailCache({
+    this.capacity = 256,
+    OCBrowseFilesFlutterPlatform? platform,
+  }) : assert(capacity > 0, 'a cache of nothing is not a cache'),
+       _platform = platform;
 
   /// The cache the sheet uses unless it is handed another one.
-  static final ThumbnailCache shared = ThumbnailCache();
+  static final OCThumbnailCache shared = OCThumbnailCache();
 
   /// How many thumbnails are kept before the least recently used is dropped.
   final int capacity;
 
-  final BrowseFilesFlutterPlatform? _platform;
+  final OCBrowseFilesFlutterPlatform? _platform;
 
   /// Insertion order is the LRU order: touched entries move to the end.
   final LinkedHashMap<String, Uint8List?> _entries =
@@ -54,8 +56,8 @@ class ThumbnailCache {
   /// about the just-stored id can simply re-peek and decide.
   Listenable get changes => _changes;
 
-  BrowseFilesFlutterPlatform get _api =>
-      _platform ?? BrowseFilesFlutterPlatform.instance;
+  OCBrowseFilesFlutterPlatform get _api =>
+      _platform ?? OCBrowseFilesFlutterPlatform.instance;
 
   /// How many thumbnails are currently held.
   @visibleForTesting
@@ -144,7 +146,7 @@ class ThumbnailCache {
 /// canonical way to call the protected method from outside the file's
 /// hierarchy.
 class _ChangeSource extends ChangeNotifier {
-  /// Allow [ThumbnailCache] to fire notifications without going through the
+  /// Allow [OCThumbnailCache] to fire notifications without going through the
   /// protected API.
   @override
   void notifyListeners() => super.notifyListeners();

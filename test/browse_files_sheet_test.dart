@@ -13,11 +13,11 @@ void main() {
 
   setUp(() {
     platform = _FakePlatform();
-    BrowseFilesFlutterPlatform.instance = platform;
+    OCBrowseFilesFlutterPlatform.instance = platform;
   });
 
   tearDown(() {
-    BrowseFilesFlutterPlatform.instance = MethodChannelBrowseFilesFlutter();
+    OCBrowseFilesFlutterPlatform.instance = OCMethodChannelBrowseFilesFlutter();
   });
 
   testWidgets('shows a grid of the library, newest first', (tester) async {
@@ -25,7 +25,7 @@ void main() {
 
     final harness = await _open(tester);
 
-    expect(find.byType(MediaTile), findsWidgets);
+    expect(find.byType(OCMediaTile), findsWidgets);
     expect(platform.fetchedPages, isNotEmpty);
     expect(platform.fetchedPages.first.limit, 50);
     expect(harness.result, isNull, reason: 'nothing confirmed yet');
@@ -36,9 +36,14 @@ void main() {
   ) async {
     platform
       ..total = 12
-      ..albums = <MediaAlbum>[
-        const MediaAlbum(id: 'all', name: 'All media', count: 12, isAll: true),
-        const MediaAlbum(id: 'camera', name: 'Camera', count: 4),
+      ..albums = <OCMediaAlbum>[
+        const OCMediaAlbum(
+          id: 'all',
+          name: 'All media',
+          count: 12,
+          isAll: true,
+        ),
+        const OCMediaAlbum(id: 'camera', name: 'Camera', count: 4),
       ];
 
     await _open(tester);
@@ -79,7 +84,7 @@ void main() {
       (offset: 50, limit: 50),
       (offset: 100, limit: 50),
     ]);
-    expect(find.byType(MediaTile), findsWidgets);
+    expect(find.byType(OCMediaTile), findsWidgets);
   });
 
   testWidgets('a library that shifts while it is paged lists no asset twice', (
@@ -94,7 +99,7 @@ void main() {
     await _scrollToEnd(tester);
 
     final ids = tester
-        .widgetList<MediaTile>(find.byType(MediaTile))
+        .widgetList<OCMediaTile>(find.byType(OCMediaTile))
         .map((tile) => tile.item.id)
         .toList();
     expect(ids.toSet().length, ids.length, reason: 'one tile per asset');
@@ -106,14 +111,14 @@ void main() {
     platform.total = 6;
 
     final harness = await _open(tester);
-    await tester.tap(find.byType(MediaTile).first);
+    await tester.tap(find.byType(OCMediaTile).first);
     await tester.pumpAndSettle();
 
     // The first pick is numbered 1 and the confirm bar counts it.
     expect(find.text('1'), findsOneWidget);
     expect(find.text('Send (1)'), findsOneWidget);
 
-    await tester.tap(find.byType(MediaTile).at(1));
+    await tester.tap(find.byType(OCMediaTile).at(1));
     await tester.pumpAndSettle();
     expect(find.text('2'), findsOneWidget);
     expect(find.text('Send (2)'), findsOneWidget);
@@ -133,11 +138,11 @@ void main() {
     platform.total = 4;
 
     await _open(tester);
-    await tester.tap(find.byType(MediaTile).first);
+    await tester.tap(find.byType(OCMediaTile).first);
     await tester.pumpAndSettle();
     expect(find.text('Send (1)'), findsOneWidget);
 
-    await tester.tap(find.byType(MediaTile).first);
+    await tester.tap(find.byType(OCMediaTile).first);
     await tester.pumpAndSettle();
     expect(find.textContaining('Send ('), findsNothing);
   });
@@ -145,9 +150,9 @@ void main() {
   testWidgets('selection stops at maxSelection', (tester) async {
     platform.total = 9;
 
-    await _open(tester, options: const BrowseFilesOptions(maxSelection: 2));
+    await _open(tester, options: const OCBrowseFilesOptions(maxSelection: 2));
     for (var i = 0; i < 3; i++) {
-      await tester.tap(find.byType(MediaTile).at(i));
+      await tester.tap(find.byType(OCMediaTile).at(i));
       await tester.pumpAndSettle();
     }
 
@@ -169,25 +174,25 @@ void main() {
 
   testWidgets('asks for access when the library is off limits', (tester) async {
     platform
-      ..status = MediaPermissionStatus.denied
+      ..status = OCMediaPermissionStatus.denied
       ..total = 5;
 
     await _open(tester);
     expect(find.text('Let this app see your photos'), findsOneWidget);
     expect(platform.fetchedPages, isEmpty, reason: 'no paging before a grant');
 
-    platform.grantOnRequest = MediaPermissionStatus.granted;
+    platform.grantOnRequest = OCMediaPermissionStatus.granted;
     await tester.tap(find.text('Allow access'));
     await tester.pumpAndSettle();
 
     expect(platform.requests, 1);
-    expect(find.byType(MediaTile), findsWidgets);
+    expect(find.byType(OCMediaTile), findsWidgets);
   });
 
   testWidgets('permanently denied points at Settings instead of prompting', (
     tester,
   ) async {
-    platform.status = MediaPermissionStatus.permanentlyDenied;
+    platform.status = OCMediaPermissionStatus.permanentlyDenied;
 
     await _open(tester);
     await tester.tap(find.text('Open settings'));
@@ -201,11 +206,11 @@ void main() {
     tester,
   ) async {
     platform
-      ..status = MediaPermissionStatus.limited
+      ..status = OCMediaPermissionStatus.limited
       ..total = 4;
 
     await _open(tester);
-    expect(find.byType(MediaTile), findsWidgets);
+    expect(find.byType(OCMediaTile), findsWidgets);
     expect(find.text('You shared some of your library'), findsOneWidget);
 
     await tester.tap(find.text('Select more'));
@@ -245,10 +250,10 @@ void main() {
   });
 
   testWidgets('custom tabs are built by the host app', (tester) async {
-    const options = BrowseFilesOptions(
-      tabs: <AttachmentTab>[
-        AttachmentTab.gallery,
-        AttachmentTab.custom(
+    const options = OCBrowseFilesOptions(
+      tabs: <OCAttachmentTab>[
+        OCAttachmentTab.gallery,
+        OCAttachmentTab.custom(
           id: 'poll',
           label: 'Poll',
           icon: Icons.poll_outlined,
@@ -266,14 +271,14 @@ void main() {
 
   testWidgets('thumbnails are cached per asset and size', (tester) async {
     platform.total = 6;
-    final cache = ThumbnailCache(capacity: 4);
+    final cache = OCThumbnailCache(capacity: 4);
 
     await _open(tester, cache: cache);
     final firstPass = platform.thumbnailRequests.length;
     expect(firstPass, greaterThan(0));
 
     // Rebuilding must not re-ask for what the cache already holds.
-    await tester.tap(find.byType(MediaTile).first);
+    await tester.tap(find.byType(OCMediaTile).first);
     await tester.pumpAndSettle();
     expect(platform.thumbnailRequests.length, firstPass);
     expect(cache.length, lessThanOrEqualTo(4));
@@ -311,7 +316,7 @@ void main() {
 
     expect(platform.fetchedPages.length, beforeResume + 1);
     expect(platform.fetchedPages.last.offset, 0);
-    expect(find.byType(MediaTile), findsNWidgets(4));
+    expect(find.byType(OCMediaTile), findsNWidgets(4));
   });
 
   testWidgets('an unchanged library survives a resume untouched', (
@@ -320,7 +325,7 @@ void main() {
     platform.total = 3;
 
     await _open(tester);
-    await tester.tap(find.byType(MediaTile).first);
+    await tester.tap(find.byType(OCMediaTile).first);
     await tester.pumpAndSettle();
 
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
@@ -337,7 +342,7 @@ void main() {
 
     await _open(
       tester,
-      options: BrowseFilesOptions(onCameraTap: () => cameraTaps++),
+      options: OCBrowseFilesOptions(onCameraTap: () => cameraTaps++),
     );
 
     final camera = find.ancestor(
@@ -345,7 +350,7 @@ void main() {
       matching: find.byType(GestureDetector),
     );
     final cameraSize = tester.getSize(camera.first);
-    final tileSize = tester.getSize(find.byType(MediaTile).first);
+    final tileSize = tester.getSize(find.byType(OCMediaTile).first);
 
     expect(cameraSize.width, closeTo(tileSize.width, 0.5));
     // Two rows of tiles plus the gap between them.
@@ -353,7 +358,7 @@ void main() {
     // It sits at the top-left, with the first asset beside it, not under it.
     expect(
       tester.getTopLeft(camera.first).dx,
-      lessThan(tester.getTopLeft(find.byType(MediaTile).first).dx),
+      lessThan(tester.getTopLeft(find.byType(OCMediaTile).first).dx),
     );
 
     await tester.tap(camera.first);
@@ -372,17 +377,17 @@ void main() {
   testWidgets('the tab row carries Telegram\'s full set when asked', (
     tester,
   ) async {
-    final options = BrowseFilesOptions(
-      tabs: <AttachmentTab>[
-        AttachmentTab.gallery,
-        AttachmentTab.file,
-        AttachmentTab.location(builder: (context) => const Text('map')),
-        AttachmentTab.article(
+    final options = OCBrowseFilesOptions(
+      tabs: <OCAttachmentTab>[
+        OCAttachmentTab.gallery,
+        OCAttachmentTab.file,
+        OCAttachmentTab.location(builder: (context) => const Text('map')),
+        OCAttachmentTab.article(
           builder: (context) => const Text('article'),
           badge: const Icon(Icons.star, size: 10),
         ),
-        AttachmentTab.poll(builder: (context) => const Text('poll')),
-        AttachmentTab.contact(builder: (context) => const Text('contact')),
+        OCAttachmentTab.poll(builder: (context) => const Text('poll')),
+        OCAttachmentTab.contact(builder: (context) => const Text('contact')),
       ],
     );
 
@@ -413,14 +418,14 @@ void main() {
 
     await _open(
       tester,
-      options: const BrowseFilesOptions(
+      options: const OCBrowseFilesOptions(
         backgroundColor: black,
         accentColor: Color(0xFF29B6A4),
       ),
     );
 
     // The theme in force where the sheet draws itself, whatever wraps it.
-    final sheet = Theme.of(tester.element(find.byType(AttachmentTabBar)));
+    final sheet = Theme.of(tester.element(find.byType(OCAttachmentTabBar)));
     expect(sheet.colorScheme.surface, black);
     expect(sheet.colorScheme.primary, const Color(0xFF29B6A4));
     // The screen behind the sheet keeps its own theme.
@@ -450,8 +455,8 @@ Future<void> _scrollToEnd(WidgetTester tester) async {
 
 Future<_Harness> _open(
   WidgetTester tester, {
-  BrowseFilesOptions options = const BrowseFilesOptions(),
-  ThumbnailCache? cache,
+  OCBrowseFilesOptions options = const OCBrowseFilesOptions(),
+  OCThumbnailCache? cache,
 }) async {
   final harness = _Harness();
   await tester.pumpWidget(
@@ -460,10 +465,10 @@ Future<_Harness> _open(
         body: Builder(
           builder: (context) => TextButton(
             onPressed: () async {
-              harness.result = await BrowseFiles.show(
+              harness.result = await OCBrowseFiles.show(
                 context,
                 options: options,
-                cache: cache ?? ThumbnailCache(capacity: 32),
+                cache: cache ?? OCThumbnailCache(capacity: 32),
               );
             },
             child: const Text('open sheet'),
@@ -478,14 +483,14 @@ Future<_Harness> _open(
 }
 
 class _Harness {
-  BrowseFilesResult? result;
+  OCBrowseFilesResult? result;
 }
 
 /// A platform that serves a synthetic library, so the sheet can be driven
 /// without a device.
-class _FakePlatform extends BrowseFilesFlutterPlatform {
-  MediaPermissionStatus status = MediaPermissionStatus.granted;
-  MediaPermissionStatus? grantOnRequest;
+class _FakePlatform extends OCBrowseFilesFlutterPlatform {
+  OCMediaPermissionStatus status = OCMediaPermissionStatus.granted;
+  OCMediaPermissionStatus? grantOnRequest;
   Duration videoDuration = const Duration(minutes: 2, seconds: 5);
   int total = 0;
   List<String> documents = const <String>[];
@@ -501,19 +506,19 @@ class _FakePlatform extends BrowseFilesFlutterPlatform {
   final List<String> thumbnailRequests = <String>[];
 
   /// The albums the top bar offers; one entry keeps the bar hidden.
-  List<MediaAlbum>? albums;
+  List<OCMediaAlbum>? albums;
 
   /// Which album each page was asked for, `null` for the whole library.
   final List<String?> fetchedAlbumIds = <String?>[];
 
   @override
-  Future<MediaPermissionStatus> permissionStatus({
-    Set<MediaType> types = kAllMediaTypes,
+  Future<OCMediaPermissionStatus> permissionStatus({
+    Set<OCMediaType> types = kAllMediaTypes,
   }) async => status;
 
   @override
-  Future<MediaPermissionStatus> requestPermission({
-    Set<MediaType> types = kAllMediaTypes,
+  Future<OCMediaPermissionStatus> requestPermission({
+    Set<OCMediaType> types = kAllMediaTypes,
   }) async {
     requests++;
     return status = grantOnRequest ?? status;
@@ -526,24 +531,24 @@ class _FakePlatform extends BrowseFilesFlutterPlatform {
   }
 
   @override
-  Future<MediaPermissionStatus> presentLimitedPicker() async {
+  Future<OCMediaPermissionStatus> presentLimitedPicker() async {
     limitedPickerShown++;
     return status;
   }
 
   @override
-  Future<List<MediaAlbum>> fetchAlbums({
-    Set<MediaType> types = kAllMediaTypes,
+  Future<List<OCMediaAlbum>> fetchAlbums({
+    Set<OCMediaType> types = kAllMediaTypes,
   }) async =>
       albums ??
-      <MediaAlbum>[
-        MediaAlbum(id: 'all', name: 'All media', count: total, isAll: true),
+      <OCMediaAlbum>[
+        OCMediaAlbum(id: 'all', name: 'All media', count: total, isAll: true),
       ];
 
   @override
-  Future<MediaPage> fetchMedia({
+  Future<OCMediaPage> fetchMedia({
     String? albumId,
-    Set<MediaType> types = kAllMediaTypes,
+    Set<OCMediaType> types = kAllMediaTypes,
     int offset = 0,
     int limit = 50,
   }) async {
@@ -553,8 +558,8 @@ class _FakePlatform extends BrowseFilesFlutterPlatform {
     // later page hands back rows an earlier one already carried.
     final start = offset == 0 ? 0 : (offset - overlap).clamp(0, total);
     final end = (start + limit).clamp(0, total);
-    return MediaPage(
-      items: <MediaItem>[for (var i = start; i < end; i++) _itemAt(i)],
+    return OCMediaPage(
+      items: <OCMediaItem>[for (var i = start; i < end; i++) _itemAt(i)],
       offset: offset,
       total: total,
     );
@@ -582,11 +587,11 @@ class _FakePlatform extends BrowseFilesFlutterPlatform {
     bool allowMultiple = true,
   }) async => documents;
 
-  MediaItem _itemAt(int index) {
+  OCMediaItem _itemAt(int index) {
     final isVideo = index == 1;
-    return MediaItem(
+    return OCMediaItem(
       id: 'asset-$index',
-      type: isVideo ? MediaType.video : MediaType.image,
+      type: isVideo ? OCMediaType.video : OCMediaType.image,
       width: 1080,
       height: 1920,
       createdAt: DateTime(2026, 1, 1).subtract(Duration(minutes: index)),

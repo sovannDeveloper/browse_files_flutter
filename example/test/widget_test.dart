@@ -65,7 +65,7 @@ void main() {
   testWidgets('granting adopts the status the platform reports', (
     WidgetTester tester,
   ) async {
-    final platform = _useFakePlatform(MediaPermissionStatus.limited);
+    final platform = _useFakePlatform(OCMediaPermissionStatus.limited);
 
     await tester.pumpWidget(const MyApp());
     await tester.tap(find.text('Grant permission'));
@@ -74,7 +74,7 @@ void main() {
     expect(platform.requests, 1);
     expect(find.text('limited'), findsOneWidget);
     expect(find.text('requestPermission'), findsOneWidget);
-    expect(find.text('${MediaPermissionStatus.limited}'), findsOneWidget);
+    expect(find.text('${OCMediaPermissionStatus.limited}'), findsOneWidget);
     // A limited grant is a grant: the next call on offer widens it.
     expect(find.widgetWithText(FilledButton, 'Select more'), findsOneWidget);
   });
@@ -86,52 +86,52 @@ void main() {
 /// no native side behind it never completes inside a widget test's fake async,
 /// so the grid would sit on its spinner until `pumpAndSettle` gave up.
 _FakePlatform _useFakePlatform([
-  MediaPermissionStatus status = MediaPermissionStatus.denied,
+  OCMediaPermissionStatus status = OCMediaPermissionStatus.denied,
 ]) {
   final platform = _FakePlatform(status);
-  BrowseFilesFlutterPlatform.instance = platform;
+  OCBrowseFilesFlutterPlatform.instance = platform;
   addTearDown(
-    () =>
-        BrowseFilesFlutterPlatform.instance = MethodChannelBrowseFilesFlutter(),
+    () => OCBrowseFilesFlutterPlatform.instance =
+        OCMethodChannelBrowseFilesFlutter(),
   );
   return platform;
 }
 
 /// A platform that answers [status] without touching a channel, and reports an
 /// empty library for everything else.
-class _FakePlatform extends BrowseFilesFlutterPlatform {
+class _FakePlatform extends OCBrowseFilesFlutterPlatform {
   _FakePlatform(this.status);
 
-  final MediaPermissionStatus status;
+  final OCMediaPermissionStatus status;
   int requests = 0;
 
   @override
-  Future<MediaPermissionStatus> permissionStatus({
-    Set<MediaType> types = kAllMediaTypes,
+  Future<OCMediaPermissionStatus> permissionStatus({
+    Set<OCMediaType> types = kAllMediaTypes,
   }) async => status;
 
   @override
-  Future<MediaPermissionStatus> requestPermission({
-    Set<MediaType> types = kAllMediaTypes,
+  Future<OCMediaPermissionStatus> requestPermission({
+    Set<OCMediaType> types = kAllMediaTypes,
   }) async {
     requests++;
     return status;
   }
 
   @override
-  Future<MediaPage> fetchMedia({
+  Future<OCMediaPage> fetchMedia({
     String? albumId,
-    Set<MediaType> types = kAllMediaTypes,
+    Set<OCMediaType> types = kAllMediaTypes,
     int offset = 0,
     int limit = 60,
-  }) async => MediaPage.empty;
+  }) async => OCMediaPage.empty;
 
   @override
-  Future<DocumentPage> fetchDocuments({
+  Future<OCDocumentPage> fetchDocuments({
     List<String> mimeTypes = const [],
     int offset = 0,
     int limit = 60,
-  }) async => DocumentPage.empty;
+  }) async => OCDocumentPage.empty;
 
   @override
   Future<List<String>> pickDocuments({

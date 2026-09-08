@@ -15,11 +15,11 @@ import 'thumbnail_cache.dart';
 
 /// The Gallery tab: permission handling, then a paged grid of the library.
 ///
-/// This widget talks to the platform only through [BrowseFilesFlutterPlatform],
+/// This widget talks to the platform only through [OCBrowseFilesFlutterPlatform],
 /// so the whole tab can be driven by a fake in tests.
-class MediaGrid extends StatefulWidget {
+class OCMediaGrid extends StatefulWidget {
   /// Creates the gallery tab.
-  const MediaGrid({
+  const OCMediaGrid({
     required this.options,
     required this.cache,
     required this.selection,
@@ -30,17 +30,17 @@ class MediaGrid extends StatefulWidget {
   });
 
   /// The sheet's options: types, paging, columns, camera tile.
-  final BrowseFilesOptions options;
+  final OCBrowseFilesOptions options;
 
   /// Where tiles get their thumbnails.
-  final ThumbnailCache cache;
+  final OCThumbnailCache cache;
 
   /// The current selection, in pick order — the grid is told, it does not own
   /// it.
-  final List<MediaItem> selection;
+  final List<OCMediaItem> selection;
 
   /// Called when a tile is tapped.
-  final ValueChanged<MediaItem> onToggle;
+  final ValueChanged<OCMediaItem> onToggle;
 
   /// The scroll controller to drive the grid with.
   ///
@@ -55,11 +55,11 @@ class MediaGrid extends StatefulWidget {
   final bool canSelectMore;
 
   @override
-  State<MediaGrid> createState() => _MediaGridState();
+  State<OCMediaGrid> createState() => _OCMediaGridState();
 }
 
-class _MediaGridState extends State<MediaGrid> with WidgetsBindingObserver {
-  final List<MediaItem> _items = <MediaItem>[];
+class _OCMediaGridState extends State<OCMediaGrid> with WidgetsBindingObserver {
+  final List<OCMediaItem> _items = <OCMediaItem>[];
 
   /// The ids in [_items], so a page cannot add an asset the grid already
   /// shows. A library that changes while it is being paged shifts every offset
@@ -69,17 +69,17 @@ class _MediaGridState extends State<MediaGrid> with WidgetsBindingObserver {
   /// The albums the top bar switches between, and the open one. Empty until
   /// the platform answers, and left empty when it cannot list albums at all —
   /// the grid works the same, it just gets no group selector.
-  List<MediaAlbum> _albums = const <MediaAlbum>[];
-  MediaAlbum? _album;
+  List<OCMediaAlbum> _albums = const <OCMediaAlbum>[];
+  OCMediaAlbum? _album;
 
-  MediaPermissionStatus? _permission;
+  OCMediaPermissionStatus? _permission;
   int _total = 0;
   bool _loadingPage = false;
   bool _busy = true;
   String? _error;
 
-  BrowseFilesFlutterPlatform get _platform =>
-      BrowseFilesFlutterPlatform.instance;
+  OCBrowseFilesFlutterPlatform get _platform =>
+      OCBrowseFilesFlutterPlatform.instance;
 
   bool get _hasMore => _items.length < _total;
 
@@ -135,7 +135,7 @@ class _MediaGridState extends State<MediaGrid> with WidgetsBindingObserver {
   }
 
   /// Adopts [items] as the whole grid.
-  void _replace(List<MediaItem> items) {
+  void _replace(List<OCMediaItem> items) {
     _items.clear();
     _ids.clear();
     _append(items);
@@ -143,7 +143,7 @@ class _MediaGridState extends State<MediaGrid> with WidgetsBindingObserver {
 
   /// Adds the items of a page the grid does not already hold, and asks for
   /// their thumbnails straight away.
-  void _append(List<MediaItem> items) {
+  void _append(List<OCMediaItem> items) {
     final added = <String>[];
     for (final item in items) {
       if (_ids.add(item.id)) {
@@ -210,10 +210,10 @@ class _MediaGridState extends State<MediaGrid> with WidgetsBindingObserver {
   /// — the grid still shows the whole library — so this fails quietly into no
   /// selector rather than into the error panel [_guard] would raise.
   Future<void> _loadAlbums() async {
-    final List<MediaAlbum> albums;
+    final List<OCMediaAlbum> albums;
     try {
       albums = await _platform.fetchAlbums(types: widget.options.types);
-    } on BrowseFilesException {
+    } on OCBrowseFilesException {
       return;
     }
     if (!mounted) return;
@@ -240,7 +240,7 @@ class _MediaGridState extends State<MediaGrid> with WidgetsBindingObserver {
   }
 
   /// Switches the grid to another album, from the first page down.
-  Future<void> _selectAlbum(MediaAlbum album) async {
+  Future<void> _selectAlbum(OCMediaAlbum album) async {
     if (album == _album) return;
     setState(() {
       _album = album;
@@ -294,7 +294,7 @@ class _MediaGridState extends State<MediaGrid> with WidgetsBindingObserver {
       final value = await call();
       if (mounted && _error != null) setState(() => _error = null);
       return value;
-    } on BrowseFilesException catch (error) {
+    } on OCBrowseFilesException catch (error) {
       if (mounted) {
         setState(() {
           _error = error.message;
@@ -332,7 +332,7 @@ class _MediaGridState extends State<MediaGrid> with WidgetsBindingObserver {
             thumbnailSize: widget.options.thumbnailSize,
             onSelected: _selectAlbum,
           ),
-        if (permission == MediaPermissionStatus.limited)
+        if (permission == OCMediaPermissionStatus.limited)
           _LimitedBanner(onSelectMore: _selectMore),
         Expanded(child: _content()),
       ],
@@ -385,7 +385,7 @@ class _MediaGridState extends State<MediaGrid> with WidgetsBindingObserver {
       cacheExtent: 600,
       // The camera cell is two rows tall, which no stock delegate can express.
       gridDelegate: hasCamera
-          ? AttachmentGridDelegate(crossAxisCount: options.crossAxisCount)
+          ? OCAttachmentGridDelegate(crossAxisCount: options.crossAxisCount)
           : SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: options.crossAxisCount,
               mainAxisSpacing: 2,
@@ -409,7 +409,7 @@ class _MediaGridState extends State<MediaGrid> with WidgetsBindingObserver {
           _loadMore();
         }
         final order = widget.selection.indexOf(item);
-        return MediaTile(
+        return OCMediaTile(
           key: ValueKey<String>(item.id),
           item: item,
           cache: widget.cache,
@@ -434,15 +434,15 @@ class _AlbumBar extends StatelessWidget {
     required this.onSelected,
   });
 
-  final List<MediaAlbum> albums;
-  final MediaAlbum? album;
-  final ThumbnailCache cache;
+  final List<OCMediaAlbum> albums;
+  final OCMediaAlbum? album;
+  final OCThumbnailCache cache;
 
   /// The size covers are requested at — the tiles' size, so the two share
   /// cache entries instead of each decoding the same asset.
   final int thumbnailSize;
 
-  final ValueChanged<MediaAlbum> onSelected;
+  final ValueChanged<OCMediaAlbum> onSelected;
 
   /// How large a cover is drawn in the menu.
   static const double _coverExtent = 44;
@@ -456,15 +456,15 @@ class _AlbumBar extends StatelessWidget {
       child: Row(
         children: [
           Flexible(
-            child: PopupMenuButton<MediaAlbum>(
+            child: PopupMenuButton<OCMediaAlbum>(
               initialValue: current,
               onSelected: onSelected,
               tooltip: 'Choose an album',
               position: PopupMenuPosition.under,
               constraints: const BoxConstraints(minWidth: 260, maxWidth: 340),
-              itemBuilder: (context) => <PopupMenuEntry<MediaAlbum>>[
+              itemBuilder: (context) => <PopupMenuEntry<OCMediaAlbum>>[
                 for (final entry in albums)
-                  PopupMenuItem<MediaAlbum>(
+                  PopupMenuItem<OCMediaAlbum>(
                     value: entry,
                     height: 60,
                     child: Row(
@@ -542,8 +542,8 @@ class _AlbumCover extends StatefulWidget {
     required this.extent,
   });
 
-  final MediaAlbum album;
-  final ThumbnailCache cache;
+  final OCMediaAlbum album;
+  final OCThumbnailCache cache;
   final int size;
   final double extent;
 
@@ -736,7 +736,7 @@ class _PermissionPanel extends StatelessWidget {
     required this.onOpenSettings,
   });
 
-  final MediaPermissionStatus status;
+  final OCMediaPermissionStatus status;
   final bool busy;
   final String? error;
   final VoidCallback onRequest;

@@ -10,11 +10,11 @@ void main() {
 
   setUp(() {
     platform = _FakePlatform();
-    BrowseFilesFlutterPlatform.instance = platform;
+    OCBrowseFilesFlutterPlatform.instance = platform;
   });
 
   tearDown(() {
-    BrowseFilesFlutterPlatform.instance = MethodChannelBrowseFilesFlutter();
+    OCBrowseFilesFlutterPlatform.instance = OCMethodChannelBrowseFilesFlutter();
   });
 
   testWidgets('opens on photos and videos, with a files tab beside it', (
@@ -26,20 +26,20 @@ void main() {
 
     expect(find.text('Photos & videos'), findsOneWidget);
     expect(find.text('Files'), findsOneWidget);
-    expect(find.byType(MediaTile), findsWidgets);
+    expect(find.byType(OCMediaTile), findsWidgets);
   });
 
   testWidgets('the files tab lists what the platform will list', (
     tester,
   ) async {
-    platform.documents = <DocumentItem>[
-      DocumentItem(
+    platform.documents = <OCDocumentItem>[
+      OCDocumentItem(
         id: '7',
         name: 'quarterly-report.pdf',
         sizeBytes: 2411724,
         modifiedAt: DateTime(2026, 1, 2),
       ),
-      DocumentItem(id: '8', name: 'notes.txt', sizeBytes: 512),
+      OCDocumentItem(id: '8', name: 'notes.txt', sizeBytes: 512),
     ];
 
     await _open(tester);
@@ -57,7 +57,7 @@ void main() {
     tester,
   ) async {
     platform
-      ..documents = const <DocumentItem>[]
+      ..documents = const <OCDocumentItem>[]
       ..enumerable = false;
 
     await _open(tester);
@@ -94,7 +94,7 @@ void main() {
 
     await _open(
       tester,
-      options: const BrowseFilesOptions(documentMimeTypes: filter),
+      options: const OCBrowseFilesOptions(documentMimeTypes: filter),
     );
     await tester.tap(find.text('Files'));
     await tester.pumpAndSettle();
@@ -108,13 +108,13 @@ void main() {
   testWidgets('one cap covers both tabs', (tester) async {
     platform
       ..mediaTotal = 4
-      ..documents = <DocumentItem>[
-        const DocumentItem(id: '7', name: 'a.pdf'),
-        const DocumentItem(id: '8', name: 'b.pdf'),
+      ..documents = <OCDocumentItem>[
+        const OCDocumentItem(id: '7', name: 'a.pdf'),
+        const OCDocumentItem(id: '8', name: 'b.pdf'),
       ];
 
-    await _open(tester, options: const BrowseFilesOptions(maxSelection: 2));
-    await tester.tap(find.byType(MediaTile).first);
+    await _open(tester, options: const OCBrowseFilesOptions(maxSelection: 2));
+    await tester.tap(find.byType(OCMediaTile).first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Files'));
     await tester.pumpAndSettle();
@@ -134,9 +134,9 @@ void main() {
   ) async {
     platform
       ..mediaTotal = 3
-      ..documents = <DocumentItem>[
-        const DocumentItem(id: '7', name: 'handle.pdf'),
-        const DocumentItem(
+      ..documents = <OCDocumentItem>[
+        const OCDocumentItem(id: '7', name: 'handle.pdf'),
+        const OCDocumentItem(
           id: '/cache/already.txt',
           name: 'already.txt',
           path: '/cache/already.txt',
@@ -144,7 +144,7 @@ void main() {
       ];
 
     final harness = await _open(tester);
-    await tester.tap(find.byType(MediaTile).first);
+    await tester.tap(find.byType(OCMediaTile).first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Files'));
     await tester.pumpAndSettle();
@@ -167,7 +167,7 @@ void main() {
 /// Pushes the page over a throwaway screen and keeps what it returns.
 Future<_Harness> _open(
   WidgetTester tester, {
-  BrowseFilesOptions options = const BrowseFilesOptions(),
+  OCBrowseFilesOptions options = const OCBrowseFilesOptions(),
 }) async {
   final harness = _Harness();
   await tester.pumpWidget(
@@ -176,10 +176,10 @@ Future<_Harness> _open(
         body: Builder(
           builder: (context) => TextButton(
             onPressed: () async {
-              harness.result = await BrowseFiles.showPage(
+              harness.result = await OCBrowseFiles.showPage(
                 context,
                 options: options,
-                cache: ThumbnailCache(capacity: 16),
+                cache: OCThumbnailCache(capacity: 16),
               );
             },
             child: const Text('open page'),
@@ -194,13 +194,13 @@ Future<_Harness> _open(
 }
 
 class _Harness {
-  BrowseFilesResult? result;
+  OCBrowseFilesResult? result;
 }
 
 /// A platform with a synthetic library and a synthetic file list.
-class _FakePlatform extends BrowseFilesFlutterPlatform {
+class _FakePlatform extends OCBrowseFilesFlutterPlatform {
   int mediaTotal = 0;
-  List<DocumentItem> documents = const <DocumentItem>[];
+  List<OCDocumentItem> documents = const <OCDocumentItem>[];
   List<String> picked = const <String>[];
   List<String>? listedWith;
   List<String>? pickedWith;
@@ -208,31 +208,31 @@ class _FakePlatform extends BrowseFilesFlutterPlatform {
   final List<String> resolved = <String>[];
 
   @override
-  Future<MediaPermissionStatus> permissionStatus({
-    Set<MediaType> types = kAllMediaTypes,
-  }) async => MediaPermissionStatus.granted;
+  Future<OCMediaPermissionStatus> permissionStatus({
+    Set<OCMediaType> types = kAllMediaTypes,
+  }) async => OCMediaPermissionStatus.granted;
 
   @override
-  Future<List<MediaAlbum>> fetchAlbums({
-    Set<MediaType> types = kAllMediaTypes,
-  }) async => <MediaAlbum>[
-    MediaAlbum(id: 'all', name: 'All media', count: mediaTotal, isAll: true),
+  Future<List<OCMediaAlbum>> fetchAlbums({
+    Set<OCMediaType> types = kAllMediaTypes,
+  }) async => <OCMediaAlbum>[
+    OCMediaAlbum(id: 'all', name: 'All media', count: mediaTotal, isAll: true),
   ];
 
   @override
-  Future<MediaPage> fetchMedia({
+  Future<OCMediaPage> fetchMedia({
     String? albumId,
-    Set<MediaType> types = kAllMediaTypes,
+    Set<OCMediaType> types = kAllMediaTypes,
     int offset = 0,
     int limit = 50,
   }) async {
     final end = (offset + limit).clamp(0, mediaTotal);
-    return MediaPage(
-      items: <MediaItem>[
+    return OCMediaPage(
+      items: <OCMediaItem>[
         for (var i = offset; i < end; i++)
-          MediaItem(
+          OCMediaItem(
             id: 'asset-$i',
-            type: MediaType.image,
+            type: OCMediaType.image,
             width: 100,
             height: 100,
             createdAt: DateTime(2026, 1, 1),
@@ -244,14 +244,14 @@ class _FakePlatform extends BrowseFilesFlutterPlatform {
   }
 
   @override
-  Future<DocumentPage> fetchDocuments({
+  Future<OCDocumentPage> fetchDocuments({
     List<String> mimeTypes = const [],
     int offset = 0,
     int limit = 50,
   }) async {
     listedWith = mimeTypes;
     final end = (offset + limit).clamp(0, documents.length);
-    return DocumentPage(
+    return OCDocumentPage(
       items: offset >= end ? const [] : documents.sublist(offset, end),
       offset: offset,
       total: documents.length,

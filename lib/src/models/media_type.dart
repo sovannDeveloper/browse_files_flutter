@@ -2,7 +2,7 @@
 ///
 /// The picker only ever deals in visual media; audio and documents arrive
 /// through the file tab, which hands back paths rather than library assets.
-enum MediaType {
+enum OCMediaType {
   /// A still image.
   image,
 
@@ -13,9 +13,9 @@ enum MediaType {
   ///
   /// Throws [ArgumentError] for anything else: both ends of this channel ship
   /// in this package, so an unrecognised name is a bug here, not user input.
-  static MediaType fromName(String? name) => switch (name) {
-    'image' => MediaType.image,
-    'video' => MediaType.video,
+  static OCMediaType fromName(String? name) => switch (name) {
+    'image' => OCMediaType.image,
+    'video' => OCMediaType.video,
     _ => throw ArgumentError.value(name, 'name', 'unknown media type'),
   };
 }

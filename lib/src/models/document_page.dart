@@ -4,9 +4,9 @@ import 'document_item.dart';
 
 /// One window onto the files the platform is willing to list.
 @immutable
-class DocumentPage {
+class OCDocumentPage {
   /// Creates a page of results.
-  const DocumentPage({
+  const OCDocumentPage({
     required this.items,
     required this.offset,
     required this.total,
@@ -14,10 +14,10 @@ class DocumentPage {
   });
 
   /// Reconstructs a page from the platform channel representation.
-  factory DocumentPage.fromMap(Map<Object?, Object?> map) => DocumentPage(
+  factory OCDocumentPage.fromMap(Map<Object?, Object?> map) => OCDocumentPage(
     items: (map['items'] as List<Object?>? ?? const [])
         .cast<Map<Object?, Object?>>()
-        .map(DocumentItem.fromMap)
+        .map(OCDocumentItem.fromMap)
         .toList(growable: false),
     offset: map['offset'] as int? ?? 0,
     total: map['total'] as int? ?? 0,
@@ -25,14 +25,14 @@ class DocumentPage {
   );
 
   /// A page with nothing in it.
-  static const DocumentPage empty = DocumentPage(
-    items: <DocumentItem>[],
+  static const OCDocumentPage empty = OCDocumentPage(
+    items: <OCDocumentItem>[],
     offset: 0,
     total: 0,
   );
 
   /// The files in this window, most recently changed first.
-  final List<DocumentItem> items;
+  final List<OCDocumentItem> items;
 
   /// The index of [items] first element within the whole list.
   final int offset;

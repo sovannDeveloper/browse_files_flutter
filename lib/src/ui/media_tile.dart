@@ -7,9 +7,9 @@ import 'thumbnail_cache.dart';
 
 /// One cell of the media grid: a thumbnail, a selection control, and — for a
 /// video — a play glyph with its duration.
-class MediaTile extends StatefulWidget {
+class OCMediaTile extends StatefulWidget {
   /// Creates a tile for [item].
-  const MediaTile({
+  const OCMediaTile({
     required this.item,
     required this.cache,
     required this.thumbnailSize,
@@ -20,10 +20,10 @@ class MediaTile extends StatefulWidget {
   });
 
   /// The asset this tile shows.
-  final MediaItem item;
+  final OCMediaItem item;
 
   /// Where the thumbnail comes from.
-  final ThumbnailCache cache;
+  final OCThumbnailCache cache;
 
   /// The pixel size to request, square.
   final int thumbnailSize;
@@ -41,10 +41,10 @@ class MediaTile extends StatefulWidget {
   bool get isSelected => selectionOrder != null;
 
   @override
-  State<MediaTile> createState() => _MediaTileState();
+  State<OCMediaTile> createState() => _OCMediaTileState();
 }
 
-class _MediaTileState extends State<MediaTile> {
+class _OCMediaTileState extends State<OCMediaTile> {
   Uint8List? _bytes;
 
   /// Set once the platform has answered without bytes: an asset it cannot make
@@ -88,7 +88,7 @@ class _MediaTileState extends State<MediaTile> {
   }
 
   @override
-  void didUpdateWidget(MediaTile oldWidget) {
+  void didUpdateWidget(OCMediaTile oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.item.id != widget.item.id ||
         oldWidget.thumbnailSize != widget.thumbnailSize) {

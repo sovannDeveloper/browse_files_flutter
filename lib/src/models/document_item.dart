@@ -7,9 +7,9 @@ import 'package:flutter/foundation.dart';
 /// so it means nothing across platforms — hand it back to `resolveFile` and
 /// use the path that comes out.
 @immutable
-class DocumentItem {
+class OCDocumentItem {
   /// Creates a description of a file.
-  const DocumentItem({
+  const OCDocumentItem({
     required this.id,
     required this.name,
     this.mimeType,
@@ -19,9 +19,9 @@ class DocumentItem {
   });
 
   /// Reconstructs an item from the platform channel representation.
-  factory DocumentItem.fromMap(Map<Object?, Object?> map) {
+  factory OCDocumentItem.fromMap(Map<Object?, Object?> map) {
     final modifiedAtMs = map['modifiedAtMs'] as int?;
-    return DocumentItem(
+    return OCDocumentItem(
       id: map['id']! as String,
       name: map['name'] as String? ?? '',
       mimeType: map['mimeType'] as String?,
@@ -34,12 +34,13 @@ class DocumentItem {
   }
 
   /// A file the app already holds — what the system picker hands back.
-  factory DocumentItem.fromPath(String path, {int? sizeBytes}) => DocumentItem(
-    id: path,
-    name: path.split('/').last,
-    sizeBytes: sizeBytes,
-    path: path,
-  );
+  factory OCDocumentItem.fromPath(String path, {int? sizeBytes}) =>
+      OCDocumentItem(
+        id: path,
+        name: path.split('/').last,
+        sizeBytes: sizeBytes,
+        path: path,
+      );
 
   /// The platform's handle on this file.
   final String id;
@@ -85,7 +86,7 @@ class DocumentItem {
 
   @override
   bool operator ==(Object other) =>
-      identical(this, other) || other is DocumentItem && other.id == id;
+      identical(this, other) || other is OCDocumentItem && other.id == id;
 
   @override
   int get hashCode => id.hashCode;

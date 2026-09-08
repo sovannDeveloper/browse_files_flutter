@@ -11,9 +11,9 @@ import '../models/document_item.dart';
 /// Neither OS lets an app walk the user's storage any more — Android 11
 /// scoped it, iOS never allowed it — so this shows what is enumerable and puts
 /// the picker at the top rather than pretending the device is empty.
-class DocumentList extends StatefulWidget {
+class OCDocumentList extends StatefulWidget {
   /// Creates the files tab.
-  const DocumentList({
+  const OCDocumentList({
     required this.options,
     required this.selection,
     required this.onToggle,
@@ -23,13 +23,13 @@ class DocumentList extends StatefulWidget {
   });
 
   /// The page's options: paging, MIME filter, selection cap.
-  final BrowseFilesOptions options;
+  final OCBrowseFilesOptions options;
 
   /// The files currently selected, in pick order.
-  final List<DocumentItem> selection;
+  final List<OCDocumentItem> selection;
 
   /// Called when a row is tapped.
-  final ValueChanged<DocumentItem> onToggle;
+  final ValueChanged<OCDocumentItem> onToggle;
 
   /// Whether another file may be added to the selection.
   final bool canSelectMore;
@@ -38,11 +38,11 @@ class DocumentList extends StatefulWidget {
   final ScrollController? scrollController;
 
   @override
-  State<DocumentList> createState() => _DocumentListState();
+  State<OCDocumentList> createState() => _OCDocumentListState();
 }
 
-class _DocumentListState extends State<DocumentList> {
-  final List<DocumentItem> _items = <DocumentItem>[];
+class _OCDocumentListState extends State<OCDocumentList> {
+  final List<OCDocumentItem> _items = <OCDocumentItem>[];
 
   /// The ids already listed: storage that changes between pages shifts the
   /// offsets after it, and the same file would otherwise be listed twice.
@@ -55,8 +55,8 @@ class _DocumentListState extends State<DocumentList> {
   bool _picking = false;
   String? _error;
 
-  BrowseFilesFlutterPlatform get _platform =>
-      BrowseFilesFlutterPlatform.instance;
+  OCBrowseFilesFlutterPlatform get _platform =>
+      OCBrowseFilesFlutterPlatform.instance;
 
   bool get _hasMore => _items.length < _total;
 
@@ -111,8 +111,8 @@ class _DocumentListState extends State<DocumentList> {
         allowMultiple: widget.options.allowMultipleDocuments,
       );
       if (!mounted) return;
-      final picked = <DocumentItem>[
-        for (final path in paths) DocumentItem.fromPath(path),
+      final picked = <OCDocumentItem>[
+        for (final path in paths) OCDocumentItem.fromPath(path),
       ];
       setState(() {
         _picking = false;
@@ -127,7 +127,7 @@ class _DocumentListState extends State<DocumentList> {
       for (final item in picked) {
         if (!widget.selection.contains(item)) widget.onToggle(item);
       }
-    } on BrowseFilesException catch (error) {
+    } on OCBrowseFilesException catch (error) {
       if (!mounted) return;
       setState(() {
         _picking = false;
@@ -139,7 +139,7 @@ class _DocumentListState extends State<DocumentList> {
   Future<T?> _guard<T>(Future<T> Function() call) async {
     try {
       return await call();
-    } on BrowseFilesException catch (error) {
+    } on OCBrowseFilesException catch (error) {
       if (mounted) {
         setState(() {
           _error = error.message;
@@ -266,7 +266,7 @@ class _DocumentRow extends StatelessWidget {
     required this.onTap,
   });
 
-  final DocumentItem item;
+  final OCDocumentItem item;
   final int? order;
   final bool enabled;
   final VoidCallback onTap;
@@ -305,7 +305,7 @@ class _DocumentRow extends StatelessWidget {
     );
   }
 
-  static String _subtitle(DocumentItem item) {
+  static String _subtitle(OCDocumentItem item) {
     final parts = <String>[
       if (item.sizeBytes != null) formatFileSize(item.sizeBytes!),
       if (item.modifiedAt != null) formatFileDate(item.modifiedAt!),

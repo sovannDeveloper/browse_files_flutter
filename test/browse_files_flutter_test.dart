@@ -6,23 +6,23 @@ import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 /// Records what the facade forwarded, and answers with canned values.
 class FakeBrowseFilesPlatform
     with MockPlatformInterfaceMixin
-    implements BrowseFilesFlutterPlatform {
+    implements OCBrowseFilesFlutterPlatform {
   final calls = <String, Object?>{};
 
   @override
-  Future<MediaPermissionStatus> permissionStatus({
-    Set<MediaType> types = kAllMediaTypes,
+  Future<OCMediaPermissionStatus> permissionStatus({
+    Set<OCMediaType> types = kAllMediaTypes,
   }) async {
     calls['permissionStatus'] = types;
-    return MediaPermissionStatus.limited;
+    return OCMediaPermissionStatus.limited;
   }
 
   @override
-  Future<MediaPermissionStatus> requestPermission({
-    Set<MediaType> types = kAllMediaTypes,
+  Future<OCMediaPermissionStatus> requestPermission({
+    Set<OCMediaType> types = kAllMediaTypes,
   }) async {
     calls['requestPermission'] = types;
-    return MediaPermissionStatus.granted;
+    return OCMediaPermissionStatus.granted;
   }
 
   @override
@@ -32,23 +32,23 @@ class FakeBrowseFilesPlatform
   }
 
   @override
-  Future<MediaPermissionStatus> presentLimitedPicker() async {
+  Future<OCMediaPermissionStatus> presentLimitedPicker() async {
     calls['presentLimitedPicker'] = true;
-    return MediaPermissionStatus.limited;
+    return OCMediaPermissionStatus.limited;
   }
 
   @override
-  Future<List<MediaAlbum>> fetchAlbums({
-    Set<MediaType> types = kAllMediaTypes,
+  Future<List<OCMediaAlbum>> fetchAlbums({
+    Set<OCMediaType> types = kAllMediaTypes,
   }) async {
     calls['fetchAlbums'] = types;
-    return const [MediaAlbum(id: 'all', name: 'All', count: 1, isAll: true)];
+    return const [OCMediaAlbum(id: 'all', name: 'All', count: 1, isAll: true)];
   }
 
   @override
-  Future<MediaPage> fetchMedia({
+  Future<OCMediaPage> fetchMedia({
     String? albumId,
-    Set<MediaType> types = kAllMediaTypes,
+    Set<OCMediaType> types = kAllMediaTypes,
     int offset = 0,
     int limit = 50,
   }) async {
@@ -58,7 +58,7 @@ class FakeBrowseFilesPlatform
       'offset': offset,
       'limit': limit,
     };
-    return MediaPage.empty;
+    return OCMediaPage.empty;
   }
 
   @override
@@ -84,7 +84,7 @@ class FakeBrowseFilesPlatform
   }
 
   @override
-  Future<DocumentPage> fetchDocuments({
+  Future<OCDocumentPage> fetchDocuments({
     List<String> mimeTypes = const [],
     int offset = 0,
     int limit = 50,
@@ -94,8 +94,8 @@ class FakeBrowseFilesPlatform
       'offset': offset,
       'limit': limit,
     };
-    return const DocumentPage(
-      items: [DocumentItem(id: '7', name: 'notes.pdf')],
+    return const OCDocumentPage(
+      items: [OCDocumentItem(id: '7', name: 'notes.pdf')],
       offset: 0,
       total: 1,
     );
@@ -115,10 +115,10 @@ class FakeBrowseFilesPlatform
 }
 
 void main() {
-  test('$MethodChannelBrowseFilesFlutter is the default instance', () {
+  test('$OCMethodChannelBrowseFilesFlutter is the default instance', () {
     expect(
-      BrowseFilesFlutterPlatform.instance,
-      isInstanceOf<MethodChannelBrowseFilesFlutter>(),
+      OCBrowseFilesFlutterPlatform.instance,
+      isInstanceOf<OCMethodChannelBrowseFilesFlutter>(),
     );
   });
 
@@ -127,21 +127,21 @@ void main() {
 
     setUp(() {
       platform = FakeBrowseFilesPlatform();
-      BrowseFilesFlutterPlatform.instance = platform;
+      OCBrowseFilesFlutterPlatform.instance = platform;
     });
 
     test('forwards every call to the platform', () async {
-      final plugin = BrowseFilesFlutter.instance;
+      final plugin = OCBrowseFilesFlutter.instance;
 
-      expect(await plugin.permissionStatus(), MediaPermissionStatus.limited);
-      expect(await plugin.requestPermission(), MediaPermissionStatus.granted);
+      expect(await plugin.permissionStatus(), OCMediaPermissionStatus.limited);
+      expect(await plugin.requestPermission(), OCMediaPermissionStatus.granted);
       expect(await plugin.openSettings(), isTrue);
       expect(
         await plugin.presentLimitedPicker(),
-        MediaPermissionStatus.limited,
+        OCMediaPermissionStatus.limited,
       );
       expect(await plugin.fetchAlbums(), hasLength(1));
-      expect(await plugin.fetchMedia(), MediaPage.empty);
+      expect(await plugin.fetchMedia(), OCMediaPage.empty);
       expect(
         await plugin.loadThumbnail('1', width: 10, height: 10),
         Uint8List.fromList(const [1, 2, 3]),
@@ -151,16 +151,16 @@ void main() {
     });
 
     test('passes its arguments through unchanged', () async {
-      await BrowseFilesFlutter.instance.fetchMedia(
+      await OCBrowseFilesFlutter.instance.fetchMedia(
         albumId: 'camera',
-        types: const {MediaType.video},
+        types: const {OCMediaType.video},
         offset: 60,
         limit: 30,
       );
 
       expect(platform.calls['fetchMedia'], {
         'albumId': 'camera',
-        'types': const {MediaType.video},
+        'types': const {OCMediaType.video},
         'offset': 60,
         'limit': 30,
       });
@@ -168,9 +168,9 @@ void main() {
 
     test('forwards fetchDocuments with its paging', () async {
       final platform = FakeBrowseFilesPlatform();
-      BrowseFilesFlutterPlatform.instance = platform;
+      OCBrowseFilesFlutterPlatform.instance = platform;
 
-      final page = await BrowseFilesFlutter.instance.fetchDocuments(
+      final page = await OCBrowseFilesFlutter.instance.fetchDocuments(
         mimeTypes: const ['application/pdf'],
         offset: 20,
         limit: 10,
@@ -185,7 +185,7 @@ void main() {
     });
 
     test('defaults to both media types', () async {
-      await BrowseFilesFlutter.instance.fetchAlbums();
+      await OCBrowseFilesFlutter.instance.fetchAlbums();
 
       expect(platform.calls['fetchAlbums'], kAllMediaTypes);
     });

@@ -3,7 +3,7 @@
 /// Photo access is not a yes/no on either platform any more: both can grant a
 /// *subset* of the library, and the picker has to render that subset plus a way
 /// to widen it rather than treating it as a refusal.
-enum MediaPermissionStatus {
+enum OCMediaPermissionStatus {
   /// The whole library is readable.
   granted,
 
@@ -35,19 +35,19 @@ enum MediaPermissionStatus {
   /// True for [limited] as well as [granted] — a partial library is still a
   /// library.
   bool get canBrowse =>
-      this == MediaPermissionStatus.granted ||
-      this == MediaPermissionStatus.limited;
+      this == OCMediaPermissionStatus.granted ||
+      this == OCMediaPermissionStatus.limited;
 
   /// Whether prompting again is pointless and the user must go to Settings.
   bool get needsSettings =>
-      this == MediaPermissionStatus.permanentlyDenied ||
-      this == MediaPermissionStatus.restricted;
+      this == OCMediaPermissionStatus.permanentlyDenied ||
+      this == OCMediaPermissionStatus.restricted;
 
   /// Reads the wire representation, falling back to [denied] for anything
   /// unrecognised — the safe reading of an unclear answer.
-  static MediaPermissionStatus fromName(String? name) =>
-      MediaPermissionStatus.values.firstWhere(
+  static OCMediaPermissionStatus fromName(String? name) =>
+      OCMediaPermissionStatus.values.firstWhere(
         (value) => value.name == name,
-        orElse: () => MediaPermissionStatus.denied,
+        orElse: () => OCMediaPermissionStatus.denied,
       );
 }

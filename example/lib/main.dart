@@ -13,7 +13,7 @@ void main() {
 
 /// A harness for the platform API, ahead of the sheet UI existing.
 ///
-/// Every call is expected to fail with [BrowseFilesErrorCode.unimplemented]
+/// Every call is expected to fail with [OCBrowseFilesErrorCode.unimplemented]
 /// until the native side lands — the point of this screen is to show, per
 /// method, exactly where the implementation has got to.
 class MyApp extends StatelessWidget {
@@ -78,13 +78,13 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
-  final _plugin = BrowseFilesFlutter.instance;
+  final _plugin = OCBrowseFilesFlutter.instance;
   final _results = <String, String>{};
-  BrowseFilesResult? _lastResult;
+  OCBrowseFilesResult? _lastResult;
 
   /// The access level last reported, or `null` while it is unknown: nothing
   /// asked yet, or the call itself failed.
-  MediaPermissionStatus? _permission;
+  OCMediaPermissionStatus? _permission;
 
   /// How many calls are in flight — the buttons are disabled while any is.
   int _busy = 0;
@@ -124,7 +124,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     try {
       value = await call();
       outcome = '$value';
-    } on BrowseFilesException catch (error) {
+    } on OCBrowseFilesException catch (error) {
       outcome = '${error.code.name}: ${error.message}';
     }
     if (!mounted) return value;
@@ -141,7 +141,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// log below says why it failed.
   Future<void> _runPermission(
     String label,
-    Future<MediaPermissionStatus> Function() call,
+    Future<OCMediaPermissionStatus> Function() call,
   ) async {
     final status = await _run(label, call);
     if (!mounted) return;
@@ -161,7 +161,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       outcome = id == null
           ? 'cancelled'
           : 'captured $id → ${await _plugin.resolveFile(id)}';
-    } on BrowseFilesException catch (error) {
+    } on OCBrowseFilesException catch (error) {
       outcome = '${error.code.name}: ${error.message}';
     } on PlatformException catch (error) {
       outcome = '${error.code}: ${error.message ?? 'the camera failed'}';
@@ -176,16 +176,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// Only Gallery and File have bodies of their own; the other four are this
   /// app's, handed in as builders.
   Future<void> _openSheet() async {
-    final result = await BrowseFiles.show(
+    final result = await OCBrowseFiles.show(
       context,
-      options: BrowseFilesOptions(
+      options: OCBrowseFilesOptions(
         maxSelection: 1,
         backgroundColor: const Color(0xFF111112),
         accentColor: const Color(0xFF2CB5A0),
         pageSize: 20,
         onCameraTap: _capture,
-        types: {MediaType.image, MediaType.video},
-        tabs: [AttachmentTab.gallery, AttachmentTab.file],
+        types: {OCMediaType.image, OCMediaType.video},
+        tabs: [OCAttachmentTab.gallery, OCAttachmentTab.file],
       ),
     );
     if (!mounted) return;
@@ -258,13 +258,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// The full-screen browser: photos and videos in one tab, other files in the
   /// next. Same result type as the sheet.
   Future<void> _openPage() async {
-    final result = await BrowseFiles.showPage(
+    final result = await OCBrowseFiles.showPage(
       context,
       title: 'All files',
-      options: const BrowseFilesOptions(
+      options: const OCBrowseFilesOptions(
         maxSelection: 10,
         allowMultipleDocuments: false,
-        types: {MediaType.video},
+        types: {OCMediaType.video},
         // documentMimeTypes: ['image/*', 'video/*'],
       ),
     );
@@ -272,7 +272,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     setState(() => _results['BrowseFiles.showPage'] = _describeResult(result));
   }
 
-  String _describeResult(BrowseFilesResult? result) => switch (result) {
+  String _describeResult(OCBrowseFilesResult? result) => switch (result) {
     null => 'dismissed',
     final picked when picked.isEmpty => 'confirmed with nothing',
     final picked =>
@@ -538,40 +538,40 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   /// The call worth making next, or `null` when there is nothing left to ask
   /// for.
-  String? _recommendedCall(MediaPermissionStatus? status) => switch (status) {
-    MediaPermissionStatus.granted => null,
-    MediaPermissionStatus.limited => 'presentLimitedPicker',
-    MediaPermissionStatus.permanentlyDenied ||
-    MediaPermissionStatus.restricted => 'openSettings',
+  String? _recommendedCall(OCMediaPermissionStatus? status) => switch (status) {
+    OCMediaPermissionStatus.granted => null,
+    OCMediaPermissionStatus.limited => 'presentLimitedPicker',
+    OCMediaPermissionStatus.permanentlyDenied ||
+    OCMediaPermissionStatus.restricted => 'openSettings',
     _ => 'requestPermission',
   };
 
-  String _describe(MediaPermissionStatus? status) => switch (status) {
+  String _describe(OCMediaPermissionStatus? status) => switch (status) {
     null => 'Unknown — nothing has been asked, or the last call failed.',
-    MediaPermissionStatus.granted => 'The whole library is readable.',
-    MediaPermissionStatus.limited =>
+    OCMediaPermissionStatus.granted => 'The whole library is readable.',
+    OCMediaPermissionStatus.limited =>
       'Only the shared subset is readable. The grid shows it plus a way to '
           'widen the grant — that is a grant, not a refusal.',
-    MediaPermissionStatus.denied => 'Refused, but asking again is allowed.',
-    MediaPermissionStatus.permanentlyDenied =>
+    OCMediaPermissionStatus.denied => 'Refused, but asking again is allowed.',
+    OCMediaPermissionStatus.permanentlyDenied =>
       'Refused for good; only system settings can change it.',
-    MediaPermissionStatus.restricted =>
+    OCMediaPermissionStatus.restricted =>
       'Blocked by policy or parental controls, so no prompt would help.',
-    MediaPermissionStatus.notDetermined => 'Nothing has been asked yet.',
+    OCMediaPermissionStatus.notDetermined => 'Nothing has been asked yet.',
   };
 
-  IconData _statusIcon(MediaPermissionStatus? status) => switch (status) {
-    null || MediaPermissionStatus.notDetermined => Icons.help_outline,
-    MediaPermissionStatus.granted => Icons.check_circle_outline,
-    MediaPermissionStatus.limited => Icons.rule,
-    MediaPermissionStatus.denied => Icons.block,
-    MediaPermissionStatus.permanentlyDenied => Icons.settings_outlined,
-    MediaPermissionStatus.restricted => Icons.lock_outline,
+  IconData _statusIcon(OCMediaPermissionStatus? status) => switch (status) {
+    null || OCMediaPermissionStatus.notDetermined => Icons.help_outline,
+    OCMediaPermissionStatus.granted => Icons.check_circle_outline,
+    OCMediaPermissionStatus.limited => Icons.rule,
+    OCMediaPermissionStatus.denied => Icons.block,
+    OCMediaPermissionStatus.permanentlyDenied => Icons.settings_outlined,
+    OCMediaPermissionStatus.restricted => Icons.lock_outline,
   };
 
-  Color _statusColor(ThemeData theme, MediaPermissionStatus? status) =>
+  Color _statusColor(ThemeData theme, OCMediaPermissionStatus? status) =>
       switch (status) {
-        null || MediaPermissionStatus.notDetermined =>
+        null || OCMediaPermissionStatus.notDetermined =>
           theme.colorScheme.onSurfaceVariant,
         _ when status.canBrowse => theme.colorScheme.primary,
         _ => theme.colorScheme.error,

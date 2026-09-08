@@ -5,14 +5,14 @@ import 'media_type.dart';
 
 /// How the attachment sheet should behave when it opens.
 @immutable
-class BrowseFilesOptions {
+class OCBrowseFilesOptions {
   /// Creates a set of sheet options; every one of them has a Telegram-shaped
   /// default.
-  const BrowseFilesOptions({
-    this.types = const <MediaType>{MediaType.image, MediaType.video},
+  const OCBrowseFilesOptions({
+    this.types = const <OCMediaType>{OCMediaType.image, OCMediaType.video},
     this.maxSelection = 10,
-    this.tabs = AttachmentTab.defaults,
-    this.initialTabId = AttachmentTab.galleryId,
+    this.tabs = OCAttachmentTab.defaults,
+    this.initialTabId = OCAttachmentTab.galleryId,
     this.crossAxisCount = 3,
     this.pageSize = 50,
     this.thumbnailSize = 256,
@@ -32,7 +32,7 @@ class BrowseFilesOptions {
        );
 
   /// Which media the gallery grid shows.
-  final Set<MediaType> types;
+  final Set<OCMediaType> types;
 
   /// How many items may be selected before further taps are refused.
   final int maxSelection;
@@ -40,9 +40,9 @@ class BrowseFilesOptions {
   /// The bottom row of attachment kinds, left to right.
   ///
   /// An empty list leaves the sheet on the gallery with no tab row.
-  final List<AttachmentTab> tabs;
+  final List<OCAttachmentTab> tabs;
 
-  /// Which of [tabs] opens first, by [AttachmentTab.id].
+  /// Which of [tabs] opens first, by [OCAttachmentTab.id].
   final String initialTabId;
 
   /// Columns in the media grid. Telegram uses three.

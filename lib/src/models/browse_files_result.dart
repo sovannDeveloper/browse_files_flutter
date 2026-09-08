@@ -9,21 +9,21 @@ import 'media_item.dart';
 /// while [documents] are already cached paths, because a SAF URI and an iOS
 /// security-scoped URL cannot be handed to the host app as they are.
 @immutable
-class BrowseFilesResult {
+class OCBrowseFilesResult {
   /// Creates a result; both lists default to empty.
-  const BrowseFilesResult({
-    this.media = const <MediaItem>[],
+  const OCBrowseFilesResult({
+    this.media = const <OCMediaItem>[],
     this.documents = const <String>[],
   });
 
   /// A result carrying nothing, for a sheet that was dismissed.
-  static const BrowseFilesResult empty = BrowseFilesResult();
+  static const OCBrowseFilesResult empty = OCBrowseFilesResult();
 
   /// The chosen library assets, in the order the user picked them.
   ///
   /// These are descriptions, not files: call `resolveFile` with an item's id
   /// when the host app needs bytes on disk.
-  final List<MediaItem> media;
+  final List<OCMediaItem> media;
 
   /// Paths of the documents chosen through the File tab, already copied into
   /// the app cache.

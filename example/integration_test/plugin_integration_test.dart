@@ -21,12 +21,12 @@ void main() {
     // a raw MissingPluginException. Tighten this to a real status once
     // permissionStatus is implemented on both platforms.
     await expectLater(
-      BrowseFilesFlutter.instance.permissionStatus(),
+      OCBrowseFilesFlutter.instance.permissionStatus(),
       throwsA(
-        isA<BrowseFilesException>().having(
+        isA<OCBrowseFilesException>().having(
           (error) => error.code,
           'code',
-          BrowseFilesErrorCode.unimplemented,
+          OCBrowseFilesErrorCode.unimplemented,
         ),
       ),
     );

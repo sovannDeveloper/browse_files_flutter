@@ -4,19 +4,19 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   group('MediaType', () {
     test('reads the wire names', () {
-      expect(MediaType.fromName('image'), MediaType.image);
-      expect(MediaType.fromName('video'), MediaType.video);
+      expect(OCMediaType.fromName('image'), OCMediaType.image);
+      expect(OCMediaType.fromName('video'), OCMediaType.video);
     });
 
     test('rejects anything else', () {
-      expect(() => MediaType.fromName('audio'), throwsArgumentError);
-      expect(() => MediaType.fromName(null), throwsArgumentError);
+      expect(() => OCMediaType.fromName('audio'), throwsArgumentError);
+      expect(() => OCMediaType.fromName(null), throwsArgumentError);
     });
   });
 
   group('MediaItem', () {
     test('parses a video, duration included', () {
-      final item = MediaItem.fromMap(const {
+      final item = OCMediaItem.fromMap(const {
         'id': '42',
         'type': 'video',
         'width': 1920,
@@ -39,7 +39,7 @@ void main() {
     });
 
     test('an image has no duration, and survives a map round trip', () {
-      final item = MediaItem.fromMap(const {
+      final item = OCMediaItem.fromMap(const {
         'id': '7',
         'type': 'image',
         'width': 100,
@@ -49,11 +49,11 @@ void main() {
 
       expect(item.duration, isNull);
       expect(item.isVideo, isFalse);
-      expect(MediaItem.fromMap(item.toMap()), item);
+      expect(OCMediaItem.fromMap(item.toMap()), item);
     });
 
     test('falls back to a square ratio when dimensions are missing', () {
-      final item = MediaItem.fromMap(const {
+      final item = OCMediaItem.fromMap(const {
         'id': '7',
         'type': 'image',
         'createdAtMs': 0,
@@ -65,7 +65,7 @@ void main() {
 
   group('MediaPage', () {
     test('knows whether another page follows', () {
-      final page = MediaPage.fromMap(const {
+      final page = OCMediaPage.fromMap(const {
         'items': [
           {'id': '1', 'type': 'image', 'createdAtMs': 0},
           {'id': '2', 'type': 'image', 'createdAtMs': 0},
@@ -77,16 +77,20 @@ void main() {
       expect(page.items, hasLength(2));
       expect(page.hasMore, isTrue);
       expect(
-        MediaPage.fromMap(const {'items': [], 'offset': 5, 'total': 5}).hasMore,
+        OCMediaPage.fromMap(const {
+          'items': [],
+          'offset': 5,
+          'total': 5,
+        }).hasMore,
         isFalse,
       );
-      expect(MediaPage.empty.hasMore, isFalse);
+      expect(OCMediaPage.empty.hasMore, isFalse);
     });
   });
 
   group('MediaAlbum', () {
     test('parses the channel representation', () {
-      final album = MediaAlbum.fromMap(const {
+      final album = OCMediaAlbum.fromMap(const {
         'id': 'all',
         'name': 'All media',
         'count': 12,
@@ -102,42 +106,42 @@ void main() {
 
   group('MediaPermissionStatus', () {
     test('limited can browse and does not need settings', () {
-      expect(MediaPermissionStatus.limited.canBrowse, isTrue);
-      expect(MediaPermissionStatus.limited.needsSettings, isFalse);
-      expect(MediaPermissionStatus.granted.canBrowse, isTrue);
-      expect(MediaPermissionStatus.denied.canBrowse, isFalse);
-      expect(MediaPermissionStatus.permanentlyDenied.needsSettings, isTrue);
-      expect(MediaPermissionStatus.restricted.needsSettings, isTrue);
+      expect(OCMediaPermissionStatus.limited.canBrowse, isTrue);
+      expect(OCMediaPermissionStatus.limited.needsSettings, isFalse);
+      expect(OCMediaPermissionStatus.granted.canBrowse, isTrue);
+      expect(OCMediaPermissionStatus.denied.canBrowse, isFalse);
+      expect(OCMediaPermissionStatus.permanentlyDenied.needsSettings, isTrue);
+      expect(OCMediaPermissionStatus.restricted.needsSettings, isTrue);
     });
 
     test('an unrecognised name reads as denied', () {
       expect(
-        MediaPermissionStatus.fromName('limited'),
-        MediaPermissionStatus.limited,
+        OCMediaPermissionStatus.fromName('limited'),
+        OCMediaPermissionStatus.limited,
       );
       expect(
-        MediaPermissionStatus.fromName('who knows'),
-        MediaPermissionStatus.denied,
+        OCMediaPermissionStatus.fromName('who knows'),
+        OCMediaPermissionStatus.denied,
       );
     });
   });
 
   group('BrowseFilesException', () {
     test('marks cancellation apart from failure', () {
-      const canceled = BrowseFilesException(
-        BrowseFilesErrorCode.userCanceled,
+      const canceled = OCBrowseFilesException(
+        OCBrowseFilesErrorCode.userCanceled,
         'dismissed',
       );
-      const failed = BrowseFilesException(
-        BrowseFilesErrorCode.ioError,
+      const failed = OCBrowseFilesException(
+        OCBrowseFilesErrorCode.ioError,
         'broken',
       );
 
       expect(canceled.isCancellation, isTrue);
       expect(failed.isCancellation, isFalse);
       expect(
-        BrowseFilesErrorCode.fromName('nope'),
-        BrowseFilesErrorCode.unknown,
+        OCBrowseFilesErrorCode.fromName('nope'),
+        OCBrowseFilesErrorCode.unknown,
       );
     });
   });

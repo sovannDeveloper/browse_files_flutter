@@ -24,20 +24,20 @@ import 'thumbnail_cache.dart';
 ///   }
 /// }
 /// ```
-class BrowseFiles {
-  const BrowseFiles._();
+class OCBrowseFiles {
+  const OCBrowseFiles._();
 
   /// Slides the attachment sheet over the current screen.
   ///
   /// Resolves to what the user confirmed, or `null` if they dismissed the
   /// sheet by tapping the scrim, dragging it down or pressing back.
-  static Future<BrowseFilesResult?> show(
+  static Future<OCBrowseFilesResult?> show(
     BuildContext context, {
-    BrowseFilesOptions options = const BrowseFilesOptions(),
-    ThumbnailCache? cache,
+    OCBrowseFilesOptions options = const OCBrowseFilesOptions(),
+    OCThumbnailCache? cache,
   }) {
     assert(Navigator.maybeOf(context) != null, _noNavigator);
-    return showModalBottomSheet<BrowseFilesResult>(
+    return showModalBottomSheet<OCBrowseFilesResult>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
@@ -52,17 +52,17 @@ class BrowseFiles {
   ///
   /// The same result as [show], for when the user is looking for something
   /// rather than grabbing the last photo they took.
-  static Future<BrowseFilesResult?> showPage(
+  static Future<OCBrowseFilesResult?> showPage(
     BuildContext context, {
-    BrowseFilesOptions options = const BrowseFilesOptions(),
-    ThumbnailCache? cache,
+    OCBrowseFilesOptions options = const OCBrowseFilesOptions(),
+    OCThumbnailCache? cache,
     String title = 'Attach',
   }) {
     assert(Navigator.maybeOf(context) != null, _noNavigator);
-    return Navigator.of(context).push<BrowseFilesResult>(
-      MaterialPageRoute<BrowseFilesResult>(
+    return Navigator.of(context).push<OCBrowseFilesResult>(
+      MaterialPageRoute<OCBrowseFilesResult>(
         builder: (context) =>
-            BrowseFilesPage(options: options, cache: cache, title: title),
+            OCBrowseFilesPage(options: options, cache: cache, title: title),
       ),
     );
   }
@@ -76,20 +76,20 @@ class BrowseFiles {
 }
 
 /// The sheet's body, exposed so it can be embedded or widget-tested without
-/// going through [BrowseFiles.show].
+/// going through [OCBrowseFiles.show].
 class BrowseFilesSheet extends StatefulWidget {
   /// Creates the sheet.
   const BrowseFilesSheet({
-    this.options = const BrowseFilesOptions(),
+    this.options = const OCBrowseFilesOptions(),
     this.cache,
     super.key,
   });
 
   /// How the sheet should behave.
-  final BrowseFilesOptions options;
+  final OCBrowseFilesOptions options;
 
-  /// The thumbnail cache to draw from; defaults to [ThumbnailCache.shared].
-  final ThumbnailCache? cache;
+  /// The thumbnail cache to draw from; defaults to [OCThumbnailCache.shared].
+  final OCThumbnailCache? cache;
 
   @override
   State<BrowseFilesSheet> createState() => _BrowseFilesSheetState();
@@ -97,8 +97,8 @@ class BrowseFilesSheet extends StatefulWidget {
 
 class _BrowseFilesSheetState extends State<BrowseFilesSheet> {
   /// The selection on each axis — the cap counts across both, like the page.
-  final List<MediaItem> _media = <MediaItem>[];
-  final List<DocumentItem> _documents = <DocumentItem>[];
+  final List<OCMediaItem> _media = <OCMediaItem>[];
+  final List<OCDocumentItem> _documents = <OCDocumentItem>[];
 
   /// The two lists need their own scroll controllers: two scrollables sharing
   /// the primary one would fight over it mid-swipe.
@@ -113,9 +113,9 @@ class _BrowseFilesSheetState extends State<BrowseFilesSheet> {
   bool _resolving = false;
   String? _error;
 
-  BrowseFilesOptions get _options => widget.options;
+  OCBrowseFilesOptions get _options => widget.options;
 
-  ThumbnailCache get _cache => widget.cache ?? ThumbnailCache.shared;
+  OCThumbnailCache get _cache => widget.cache ?? OCThumbnailCache.shared;
 
   int get _count => _media.length + _documents.length;
 
@@ -126,13 +126,13 @@ class _BrowseFilesSheetState extends State<BrowseFilesSheet> {
       _options.tabs.any((tab) => tab.id == _options.initialTabId)
       ? _options.initialTabId
       : (_options.tabs.isEmpty
-            ? AttachmentTab.galleryId
+            ? OCAttachmentTab.galleryId
             : _options.tabs.first.id);
 
   /// The open tab, falling back to the gallery for an empty tab row.
-  AttachmentTab get _activeTab => _options.tabs.firstWhere(
+  OCAttachmentTab get _activeTab => _options.tabs.firstWhere(
     (tab) => tab.id == _tabId,
-    orElse: () => AttachmentTab.gallery,
+    orElse: () => OCAttachmentTab.gallery,
   );
 
   @override
@@ -142,7 +142,7 @@ class _BrowseFilesSheetState extends State<BrowseFilesSheet> {
     super.dispose();
   }
 
-  void _toggleMedia(MediaItem item) {
+  void _toggleMedia(OCMediaItem item) {
     setState(() {
       if (_media.remove(item)) return;
       if (!_canSelectMore) return;
@@ -150,7 +150,7 @@ class _BrowseFilesSheetState extends State<BrowseFilesSheet> {
     });
   }
 
-  void _toggleDocument(DocumentItem item) {
+  void _toggleDocument(OCDocumentItem item) {
     setState(() {
       if (_documents.remove(item)) return;
       if (!_canSelectMore) return;
@@ -170,12 +170,12 @@ class _BrowseFilesSheetState extends State<BrowseFilesSheet> {
       for (final document in _documents) {
         paths.add(
           document.path ??
-              await BrowseFilesFlutterPlatform.instance.resolveFile(
+              await OCBrowseFilesFlutterPlatform.instance.resolveFile(
                 document.id,
               ),
         );
       }
-    } on BrowseFilesException catch (error) {
+    } on OCBrowseFilesException catch (error) {
       if (!mounted) return;
       setState(() {
         _resolving = false;
@@ -185,8 +185,8 @@ class _BrowseFilesSheetState extends State<BrowseFilesSheet> {
     }
     if (!mounted) return;
     Navigator.of(context).pop(
-      BrowseFilesResult(
-        media: List<MediaItem>.unmodifiable(_media),
+      OCBrowseFilesResult(
+        media: List<OCMediaItem>.unmodifiable(_media),
         documents: List<String>.unmodifiable(paths),
       ),
     );
@@ -285,7 +285,7 @@ class _BrowseFilesSheetState extends State<BrowseFilesSheet> {
                             child: Column(
                               children: [
                                 if (_count <= 0)
-                                  AttachmentTabBar(
+                                  OCAttachmentTabBar(
                                     tabs: _options.tabs,
                                     activeId: _tabId,
                                     barColor: _barColor(theme),
@@ -311,8 +311,8 @@ class _BrowseFilesSheetState extends State<BrowseFilesSheet> {
 
   Widget _body(ScrollController scrollController, ThemeData theme) {
     final tab = _activeTab;
-    if (tab.id == AttachmentTab.galleryId && tab.isBuiltIn) {
-      return MediaGrid(
+    if (tab.id == OCAttachmentTab.galleryId && tab.isBuiltIn) {
+      return OCMediaGrid(
         key: const ValueKey<String>('browse-files-gallery'),
         options: _options,
         cache: _cache,
@@ -322,8 +322,8 @@ class _BrowseFilesSheetState extends State<BrowseFilesSheet> {
         canSelectMore: _canSelectMore,
       );
     }
-    if (tab.id == AttachmentTab.fileId && tab.isBuiltIn) {
-      return DocumentList(
+    if (tab.id == OCAttachmentTab.fileId && tab.isBuiltIn) {
+      return OCDocumentList(
         key: const ValueKey<String>('browse-files-file'),
         options: _options,
         selection: _documents,

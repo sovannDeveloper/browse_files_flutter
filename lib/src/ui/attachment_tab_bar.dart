@@ -4,9 +4,9 @@ import '../models/attachment_tab.dart';
 
 /// The floating, horizontally scrollable row of attachment kinds along the
 /// sheet's bottom edge, the open one sitting in a tinted pill.
-class AttachmentTabBar extends StatelessWidget {
+class OCAttachmentTabBar extends StatelessWidget {
   /// Creates the tab row.
-  const AttachmentTabBar({
+  const OCAttachmentTabBar({
     required this.tabs,
     required this.activeId,
     required this.onSelected,
@@ -15,13 +15,13 @@ class AttachmentTabBar extends StatelessWidget {
   });
 
   /// The tabs to show, left to right.
-  final List<AttachmentTab> tabs;
+  final List<OCAttachmentTab> tabs;
 
-  /// The [AttachmentTab.id] currently open.
+  /// The [OCAttachmentTab.id] currently open.
   final String activeId;
 
   /// Called with the tab the user tapped.
-  final ValueChanged<AttachmentTab> onSelected;
+  final ValueChanged<OCAttachmentTab> onSelected;
 
   /// The bar's own colour, a step away from the sheet behind it.
   final Color? barColor;
@@ -66,7 +66,7 @@ class _TabButton extends StatelessWidget {
     required this.onTap,
   });
 
-  final AttachmentTab tab;
+  final OCAttachmentTab tab;
   final bool active;
   final ColorScheme scheme;
   final VoidCallback onTap;

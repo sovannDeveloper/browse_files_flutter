@@ -14,32 +14,32 @@ import 'thumbnail_cache.dart';
 /// one tab, every other file in the next.
 ///
 /// The sheet is for picking something quickly without leaving the screen; this
-/// is for browsing. Both hand back the same [BrowseFilesResult], and the
+/// is for browsing. Both hand back the same [OCBrowseFilesResult], and the
 /// selection cap counts across both tabs — ten attachments is ten, whichever
 /// tab they came from.
-class BrowseFilesPage extends StatefulWidget {
+class OCBrowseFilesPage extends StatefulWidget {
   /// Creates the page.
-  const BrowseFilesPage({
-    this.options = const BrowseFilesOptions(),
+  const OCBrowseFilesPage({
+    this.options = const OCBrowseFilesOptions(),
     this.cache,
     this.title = 'Attach',
     super.key,
   });
 
   /// How the page should behave: types, paging, cap, MIME filter.
-  final BrowseFilesOptions options;
+  final OCBrowseFilesOptions options;
 
-  /// The thumbnail cache to draw from; defaults to [ThumbnailCache.shared].
-  final ThumbnailCache? cache;
+  /// The thumbnail cache to draw from; defaults to [OCThumbnailCache.shared].
+  final OCThumbnailCache? cache;
 
   /// The app bar's title.
   final String title;
 
   @override
-  State<BrowseFilesPage> createState() => _BrowseFilesPageState();
+  State<OCBrowseFilesPage> createState() => _OCBrowseFilesPageState();
 }
 
-class _BrowseFilesPageState extends State<BrowseFilesPage>
+class _OCBrowseFilesPageState extends State<OCBrowseFilesPage>
     with SingleTickerProviderStateMixin {
   late final TabController _tabs = TabController(length: 2, vsync: this);
 
@@ -48,13 +48,13 @@ class _BrowseFilesPageState extends State<BrowseFilesPage>
   final ScrollController _mediaScroll = ScrollController();
   final ScrollController _documentScroll = ScrollController();
 
-  final List<MediaItem> _media = <MediaItem>[];
-  final List<DocumentItem> _documents = <DocumentItem>[];
+  final List<OCMediaItem> _media = <OCMediaItem>[];
+  final List<OCDocumentItem> _documents = <OCDocumentItem>[];
 
   bool _resolving = false;
   String? _error;
 
-  BrowseFilesOptions get _options => widget.options;
+  OCBrowseFilesOptions get _options => widget.options;
 
   int get _count => _media.length + _documents.length;
 
@@ -68,7 +68,7 @@ class _BrowseFilesPageState extends State<BrowseFilesPage>
     super.dispose();
   }
 
-  void _toggleMedia(MediaItem item) {
+  void _toggleMedia(OCMediaItem item) {
     setState(() {
       if (_media.remove(item)) return;
       if (!_canSelectMore) return;
@@ -76,7 +76,7 @@ class _BrowseFilesPageState extends State<BrowseFilesPage>
     });
   }
 
-  void _toggleDocument(DocumentItem item) {
+  void _toggleDocument(OCDocumentItem item) {
     setState(() {
       if (_documents.remove(item)) return;
       if (!_canSelectMore) return;
@@ -99,12 +99,12 @@ class _BrowseFilesPageState extends State<BrowseFilesPage>
       for (final document in _documents) {
         paths.add(
           document.path ??
-              await BrowseFilesFlutterPlatform.instance.resolveFile(
+              await OCBrowseFilesFlutterPlatform.instance.resolveFile(
                 document.id,
               ),
         );
       }
-    } on BrowseFilesException catch (error) {
+    } on OCBrowseFilesException catch (error) {
       if (!mounted) return;
       setState(() {
         _resolving = false;
@@ -114,8 +114,8 @@ class _BrowseFilesPageState extends State<BrowseFilesPage>
     }
     if (!mounted) return;
     Navigator.of(context).pop(
-      BrowseFilesResult(
-        media: List<MediaItem>.unmodifiable(_media),
+      OCBrowseFilesResult(
+        media: List<OCMediaItem>.unmodifiable(_media),
         documents: List<String>.unmodifiable(paths),
       ),
     );
@@ -138,15 +138,15 @@ class _BrowseFilesPageState extends State<BrowseFilesPage>
       body: TabBarView(
         controller: _tabs,
         children: [
-          MediaGrid(
+          OCMediaGrid(
             options: _options,
-            cache: widget.cache ?? ThumbnailCache.shared,
+            cache: widget.cache ?? OCThumbnailCache.shared,
             selection: _media,
             onToggle: _toggleMedia,
             scrollController: _mediaScroll,
             canSelectMore: _canSelectMore,
           ),
-          DocumentList(
+          OCDocumentList(
             options: _options,
             selection: _documents,
             onToggle: _toggleDocument,

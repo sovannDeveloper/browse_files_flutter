@@ -9,7 +9,7 @@ import 'models/media_permission.dart';
 import 'models/media_type.dart';
 
 /// Every media type the picker knows about — the default filter.
-const Set<MediaType> kAllMediaTypes = {MediaType.image, MediaType.video};
+const Set<OCMediaType> kAllMediaTypes = {OCMediaType.image, OCMediaType.video};
 
 /// The interface every platform implementation of `browse_files_flutter`
 /// fulfils.
@@ -20,42 +20,42 @@ const Set<MediaType> kAllMediaTypes = {MediaType.image, MediaType.video};
 /// Everything here is deliberately low-level: enumeration is paged, thumbnails
 /// are fetched one asset at a time, and files are only materialised on demand.
 /// The sheet UI is a consumer of this interface, never a peer of it.
-abstract class BrowseFilesFlutterPlatform extends PlatformInterface {
+abstract class OCBrowseFilesFlutterPlatform extends PlatformInterface {
   /// Constructs a platform implementation.
-  BrowseFilesFlutterPlatform() : super(token: _token);
+  OCBrowseFilesFlutterPlatform() : super(token: _token);
 
   static final Object _token = Object();
 
-  static BrowseFilesFlutterPlatform _instance =
-      MethodChannelBrowseFilesFlutter();
+  static OCBrowseFilesFlutterPlatform _instance =
+      OCMethodChannelBrowseFilesFlutter();
 
   /// The default instance to use.
   ///
-  /// Defaults to [MethodChannelBrowseFilesFlutter].
-  static BrowseFilesFlutterPlatform get instance => _instance;
+  /// Defaults to [OCMethodChannelBrowseFilesFlutter].
+  static OCBrowseFilesFlutterPlatform get instance => _instance;
 
   /// Platform-specific implementations should set this with their own
-  /// platform-specific class that extends [BrowseFilesFlutterPlatform] when
+  /// platform-specific class that extends [OCBrowseFilesFlutterPlatform] when
   /// they register themselves.
-  static set instance(BrowseFilesFlutterPlatform instance) {
+  static set instance(OCBrowseFilesFlutterPlatform instance) {
     PlatformInterface.verifyToken(instance, _token);
     _instance = instance;
   }
 
   /// The current access level, without prompting.
-  Future<MediaPermissionStatus> permissionStatus({
-    Set<MediaType> types = kAllMediaTypes,
+  Future<OCMediaPermissionStatus> permissionStatus({
+    Set<OCMediaType> types = kAllMediaTypes,
   }) {
     throw UnimplementedError('permissionStatus() has not been implemented.');
   }
 
   /// Prompts for library access and reports what the user granted.
   ///
-  /// May resolve to [MediaPermissionStatus.limited]: on Android 14+ and iOS the
+  /// May resolve to [OCMediaPermissionStatus.limited]: on Android 14+ and iOS the
   /// user can share a subset instead of the whole library, and that is a
   /// success, not a refusal.
-  Future<MediaPermissionStatus> requestPermission({
-    Set<MediaType> types = kAllMediaTypes,
+  Future<OCMediaPermissionStatus> requestPermission({
+    Set<OCMediaType> types = kAllMediaTypes,
   }) {
     throw UnimplementedError('requestPermission() has not been implemented.');
   }
@@ -66,11 +66,11 @@ abstract class BrowseFilesFlutterPlatform extends PlatformInterface {
     throw UnimplementedError('openSettings() has not been implemented.');
   }
 
-  /// Shows the OS picker that widens a [MediaPermissionStatus.limited] grant,
+  /// Shows the OS picker that widens a [OCMediaPermissionStatus.limited] grant,
   /// and reports the access level once it closes.
   ///
   /// The "select more photos" affordance the grid shows in limited mode.
-  Future<MediaPermissionStatus> presentLimitedPicker() {
+  Future<OCMediaPermissionStatus> presentLimitedPicker() {
     throw UnimplementedError(
       'presentLimitedPicker() has not been implemented.',
     );
@@ -79,8 +79,8 @@ abstract class BrowseFilesFlutterPlatform extends PlatformInterface {
   /// The albums that hold at least one asset of the given [types].
   ///
   /// The first entry is the synthetic "all media" album the grid opens on.
-  Future<List<MediaAlbum>> fetchAlbums({
-    Set<MediaType> types = kAllMediaTypes,
+  Future<List<OCMediaAlbum>> fetchAlbums({
+    Set<OCMediaType> types = kAllMediaTypes,
   }) {
     throw UnimplementedError('fetchAlbums() has not been implemented.');
   }
@@ -91,9 +91,9 @@ abstract class BrowseFilesFlutterPlatform extends PlatformInterface {
   /// off the platform main thread and must not read more than [limit] rows —
   /// the grid pages as it scrolls, and a full-library fetch will not fit in
   /// memory or in a channel message.
-  Future<MediaPage> fetchMedia({
+  Future<OCMediaPage> fetchMedia({
     String? albumId,
-    Set<MediaType> types = kAllMediaTypes,
+    Set<OCMediaType> types = kAllMediaTypes,
     int offset = 0,
     int limit = 50,
   }) {
@@ -128,8 +128,8 @@ abstract class BrowseFilesFlutterPlatform extends PlatformInterface {
   ///
   /// This is never the whole device: scoped storage on Android 11+ and the
   /// sandbox on iOS keep everything but this app's own files behind the system
-  /// picker, and [DocumentPage.enumerable] says when that is the case.
-  Future<DocumentPage> fetchDocuments({
+  /// picker, and [OCDocumentPage.enumerable] says when that is the case.
+  Future<OCDocumentPage> fetchDocuments({
     List<String> mimeTypes = const [],
     int offset = 0,
     int limit = 50,

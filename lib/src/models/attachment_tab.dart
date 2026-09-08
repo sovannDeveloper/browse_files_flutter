@@ -7,8 +7,8 @@ import 'package:flutter/material.dart';
 /// points: hand [AttachmentTab.custom] a [builder] and the host app owns that
 /// tab's body entirely.
 @immutable
-class AttachmentTab {
-  const AttachmentTab._({
+class OCAttachmentTab {
+  const OCAttachmentTab._({
     required this.id,
     required this.label,
     required this.icon,
@@ -17,7 +17,7 @@ class AttachmentTab {
 
   /// A tab whose body the host app builds — anything this package deliberately
   /// does not implement.
-  const AttachmentTab.custom({
+  const OCAttachmentTab.custom({
     required this.id,
     required this.label,
     required this.icon,
@@ -26,7 +26,7 @@ class AttachmentTab {
   });
 
   /// Telegram's Location tab. The map is the host app's to draw.
-  const AttachmentTab.location({
+  const OCAttachmentTab.location({
     required WidgetBuilder this.builder,
     this.label = 'Location',
     this.badge,
@@ -34,7 +34,7 @@ class AttachmentTab {
        icon = Icons.location_on_outlined;
 
   /// Telegram's Article tab, the one that carries a badge in their UI.
-  const AttachmentTab.article({
+  const OCAttachmentTab.article({
     required WidgetBuilder this.builder,
     this.label = 'Article',
     this.badge,
@@ -42,7 +42,7 @@ class AttachmentTab {
        icon = Icons.article_outlined;
 
   /// Telegram's Poll tab.
-  const AttachmentTab.poll({
+  const OCAttachmentTab.poll({
     required WidgetBuilder this.builder,
     this.label = 'Poll',
     this.badge,
@@ -50,7 +50,7 @@ class AttachmentTab {
        icon = Icons.bar_chart;
 
   /// Telegram's Contact tab.
-  const AttachmentTab.contact({
+  const OCAttachmentTab.contact({
     required WidgetBuilder this.builder,
     this.label = 'Contact',
     this.badge,
@@ -58,14 +58,14 @@ class AttachmentTab {
        icon = Icons.person_outline;
 
   /// The device's photos and videos, in a grid.
-  static const AttachmentTab gallery = AttachmentTab._(
+  static const OCAttachmentTab gallery = OCAttachmentTab._(
     id: galleryId,
     label: 'Gallery',
     icon: Icons.photo_library_outlined,
   );
 
   /// The system document picker.
-  static const AttachmentTab file = AttachmentTab._(
+  static const OCAttachmentTab file = OCAttachmentTab._(
     id: fileId,
     label: 'File',
     icon: Icons.insert_drive_file_outlined,
@@ -90,7 +90,10 @@ class AttachmentTab {
   static const String contactId = 'contact';
 
   /// The two tabs this package implements, in Telegram's order.
-  static const List<AttachmentTab> defaults = <AttachmentTab>[gallery, file];
+  static const List<OCAttachmentTab> defaults = <OCAttachmentTab>[
+    gallery,
+    file,
+  ];
 
   /// Identifies the tab; also what `initialTabId` selects.
   final String id;
@@ -114,7 +117,7 @@ class AttachmentTab {
 
   @override
   bool operator ==(Object other) =>
-      identical(this, other) || other is AttachmentTab && other.id == id;
+      identical(this, other) || other is OCAttachmentTab && other.id == id;
 
   @override
   int get hashCode => id.hashCode;

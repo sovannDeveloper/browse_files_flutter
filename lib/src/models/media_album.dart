@@ -3,9 +3,9 @@ import 'package:flutter/foundation.dart';
 /// A bucket of media the user can switch the grid to — "Camera", "Screenshots",
 /// "Downloads" on Android; a `PHAssetCollection` on iOS.
 @immutable
-class MediaAlbum {
+class OCMediaAlbum {
   /// Creates an album description.
-  const MediaAlbum({
+  const OCMediaAlbum({
     required this.id,
     required this.name,
     required this.count,
@@ -14,7 +14,7 @@ class MediaAlbum {
   });
 
   /// Reconstructs an album from the platform channel representation.
-  factory MediaAlbum.fromMap(Map<Object?, Object?> map) => MediaAlbum(
+  factory OCMediaAlbum.fromMap(Map<Object?, Object?> map) => OCMediaAlbum(
     id: map['id']! as String,
     name: map['name'] as String? ?? '',
     count: map['count'] as int? ?? 0,
@@ -39,7 +39,7 @@ class MediaAlbum {
 
   @override
   bool operator ==(Object other) =>
-      identical(this, other) || other is MediaAlbum && other.id == id;
+      identical(this, other) || other is OCMediaAlbum && other.id == id;
 
   @override
   int get hashCode => id.hashCode;

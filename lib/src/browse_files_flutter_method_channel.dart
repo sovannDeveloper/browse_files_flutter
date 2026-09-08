@@ -9,12 +9,12 @@ import 'models/media_page.dart';
 import 'models/media_permission.dart';
 import 'models/media_type.dart';
 
-/// The default [BrowseFilesFlutterPlatform], talking to Android and iOS over a
+/// The default [OCBrowseFilesFlutterPlatform], talking to Android and iOS over a
 /// method channel.
 ///
 /// Every call funnels its failures through [_toBrowseFilesException], so
-/// callers only ever catch [BrowseFilesException].
-class MethodChannelBrowseFilesFlutter extends BrowseFilesFlutterPlatform {
+/// callers only ever catch [OCBrowseFilesException].
+class OCMethodChannelBrowseFilesFlutter extends OCBrowseFilesFlutterPlatform {
   /// The channel carrying one-shot calls.
   @visibleForTesting
   final MethodChannel methodChannel = const MethodChannel(
@@ -22,8 +22,8 @@ class MethodChannelBrowseFilesFlutter extends BrowseFilesFlutterPlatform {
   );
 
   @override
-  Future<MediaPermissionStatus> permissionStatus({
-    Set<MediaType> types = kAllMediaTypes,
+  Future<OCMediaPermissionStatus> permissionStatus({
+    Set<OCMediaType> types = kAllMediaTypes,
   }) async {
     final names = _typeNames(types);
     return _guard(() async {
@@ -31,13 +31,13 @@ class MethodChannelBrowseFilesFlutter extends BrowseFilesFlutterPlatform {
         'permissionStatus',
         {'types': names},
       );
-      return MediaPermissionStatus.fromName(name);
+      return OCMediaPermissionStatus.fromName(name);
     });
   }
 
   @override
-  Future<MediaPermissionStatus> requestPermission({
-    Set<MediaType> types = kAllMediaTypes,
+  Future<OCMediaPermissionStatus> requestPermission({
+    Set<OCMediaType> types = kAllMediaTypes,
   }) async {
     final names = _typeNames(types);
     return _guard(() async {
@@ -45,7 +45,7 @@ class MethodChannelBrowseFilesFlutter extends BrowseFilesFlutterPlatform {
         'requestPermission',
         {'types': names},
       );
-      return MediaPermissionStatus.fromName(name);
+      return OCMediaPermissionStatus.fromName(name);
     });
   }
 
@@ -58,18 +58,18 @@ class MethodChannelBrowseFilesFlutter extends BrowseFilesFlutterPlatform {
   }
 
   @override
-  Future<MediaPermissionStatus> presentLimitedPicker() async {
+  Future<OCMediaPermissionStatus> presentLimitedPicker() async {
     return _guard(() async {
       final name = await methodChannel.invokeMethod<String>(
         'presentLimitedPicker',
       );
-      return MediaPermissionStatus.fromName(name);
+      return OCMediaPermissionStatus.fromName(name);
     });
   }
 
   @override
-  Future<List<MediaAlbum>> fetchAlbums({
-    Set<MediaType> types = kAllMediaTypes,
+  Future<List<OCMediaAlbum>> fetchAlbums({
+    Set<OCMediaType> types = kAllMediaTypes,
   }) async {
     final names = _typeNames(types);
     return _guard(() async {
@@ -79,15 +79,15 @@ class MethodChannelBrowseFilesFlutter extends BrowseFilesFlutterPlatform {
       );
       return (albums ?? const [])
           .cast<Map<Object?, Object?>>()
-          .map(MediaAlbum.fromMap)
+          .map(OCMediaAlbum.fromMap)
           .toList(growable: false);
     });
   }
 
   @override
-  Future<MediaPage> fetchMedia({
+  Future<OCMediaPage> fetchMedia({
     String? albumId,
-    Set<MediaType> types = kAllMediaTypes,
+    Set<OCMediaType> types = kAllMediaTypes,
     int offset = 0,
     int limit = 50,
   }) async {
@@ -103,7 +103,7 @@ class MethodChannelBrowseFilesFlutter extends BrowseFilesFlutterPlatform {
         'fetchMedia',
         {'albumId': albumId, 'types': names, 'offset': offset, 'limit': limit},
       );
-      return page == null ? MediaPage.empty : MediaPage.fromMap(page);
+      return page == null ? OCMediaPage.empty : OCMediaPage.fromMap(page);
     });
   }
 
@@ -136,8 +136,8 @@ class MethodChannelBrowseFilesFlutter extends BrowseFilesFlutterPlatform {
         'id': id,
       });
       if (path == null) {
-        throw BrowseFilesException(
-          BrowseFilesErrorCode.notFound,
+        throw OCBrowseFilesException(
+          OCBrowseFilesErrorCode.notFound,
           'The asset $id could not be resolved to a file.',
         );
       }
@@ -146,7 +146,7 @@ class MethodChannelBrowseFilesFlutter extends BrowseFilesFlutterPlatform {
   }
 
   @override
-  Future<DocumentPage> fetchDocuments({
+  Future<OCDocumentPage> fetchDocuments({
     List<String> mimeTypes = const [],
     int offset = 0,
     int limit = 50,
@@ -162,7 +162,7 @@ class MethodChannelBrowseFilesFlutter extends BrowseFilesFlutterPlatform {
         'fetchDocuments',
         {'mimeTypes': mimeTypes, 'offset': offset, 'limit': limit},
       );
-      return page == null ? DocumentPage.empty : DocumentPage.fromMap(page);
+      return page == null ? OCDocumentPage.empty : OCDocumentPage.fromMap(page);
     });
   }
 
@@ -180,7 +180,7 @@ class MethodChannelBrowseFilesFlutter extends BrowseFilesFlutterPlatform {
     });
   }
 
-  List<String> _typeNames(Set<MediaType> types) {
+  List<String> _typeNames(Set<OCMediaType> types) {
     if (types.isEmpty) {
       throw ArgumentError.value(
         types,
@@ -192,11 +192,11 @@ class MethodChannelBrowseFilesFlutter extends BrowseFilesFlutterPlatform {
   }
 
   /// Runs a channel call, translating anything it throws into a
-  /// [BrowseFilesException].
+  /// [OCBrowseFilesException].
   Future<T> _guard<T>(Future<T> Function() call) async {
     try {
       return await call();
-    } on BrowseFilesException {
+    } on OCBrowseFilesException {
       rethrow;
     } catch (error) {
       throw _toBrowseFilesException(error);
@@ -206,17 +206,17 @@ class MethodChannelBrowseFilesFlutter extends BrowseFilesFlutterPlatform {
 
 /// Turns a channel error into the plugin's own exception type, so callers never
 /// have to reason about [PlatformException] codes.
-BrowseFilesException _toBrowseFilesException(Object error) => switch (error) {
-  BrowseFilesException() => error,
-  MissingPluginException() => BrowseFilesException(
-    BrowseFilesErrorCode.unimplemented,
+OCBrowseFilesException _toBrowseFilesException(Object error) => switch (error) {
+  OCBrowseFilesException() => error,
+  MissingPluginException() => OCBrowseFilesException(
+    OCBrowseFilesErrorCode.unimplemented,
     error.message ??
         'This platform has no browse_files_flutter implementation.',
   ),
-  PlatformException() => BrowseFilesException(
-    BrowseFilesErrorCode.fromName(error.code),
+  PlatformException() => OCBrowseFilesException(
+    OCBrowseFilesErrorCode.fromName(error.code),
     error.message ?? 'The media library call failed.',
     details: error.details?.toString(),
   ),
-  _ => BrowseFilesException(BrowseFilesErrorCode.unknown, error.toString()),
+  _ => OCBrowseFilesException(OCBrowseFilesErrorCode.unknown, error.toString()),
 };

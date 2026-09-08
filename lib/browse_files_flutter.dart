@@ -1,14 +1,14 @@
 /// A Telegram-style attachment bottom sheet for browsing device photos, videos
 /// and documents.
 ///
-/// Start with [BrowseFilesFlutter.instance]: check
-/// [BrowseFilesFlutter.permissionStatus], prompt with
-/// [BrowseFilesFlutter.requestPermission] — remembering that
-/// [MediaPermissionStatus.limited] is a *grant* — then page the library with
-/// [BrowseFilesFlutter.fetchMedia] and draw each tile from
-/// [BrowseFilesFlutter.loadThumbnail].
+/// Start with [OCBrowseFilesFlutter.instance]: check
+/// [OCBrowseFilesFlutter.permissionStatus], prompt with
+/// [OCBrowseFilesFlutter.requestPermission] — remembering that
+/// [OCMediaPermissionStatus.limited] is a *grant* — then page the library with
+/// [OCBrowseFilesFlutter.fetchMedia] and draw each tile from
+/// [OCBrowseFilesFlutter.loadThumbnail].
 ///
-/// A library id is not a path: call [BrowseFilesFlutter.resolveFile] on the
+/// A library id is not a path: call [OCBrowseFilesFlutter.resolveFile] on the
 /// final selection to get a file the host app can read.
 ///
 /// The sheet UI itself is not implemented yet — see `CLAUDE.md` for the
@@ -37,55 +37,55 @@ export 'src/models/media_item.dart';
 export 'src/models/media_page.dart';
 export 'src/models/media_permission.dart';
 export 'src/models/media_type.dart';
-export 'src/ui/browse_files_page.dart' show BrowseFilesPage;
-export 'src/ui/browse_files_sheet.dart' show BrowseFiles, BrowseFilesSheet;
+export 'src/ui/browse_files_page.dart' show OCBrowseFilesPage;
+export 'src/ui/browse_files_sheet.dart' show OCBrowseFiles, BrowseFilesSheet;
 export 'src/ui/thumbnail_cache.dart';
 
 /// Entry point of the plugin.
 ///
-/// A thin facade over [BrowseFilesFlutterPlatform]; every call here fails with
+/// A thin facade over [OCBrowseFilesFlutterPlatform]; every call here fails with
 /// a [BrowseFilesException] and nothing else.
-class BrowseFilesFlutter {
-  BrowseFilesFlutter._();
+class OCBrowseFilesFlutter {
+  OCBrowseFilesFlutter._();
 
   /// The instance to call the plugin through.
-  static final BrowseFilesFlutter instance = BrowseFilesFlutter._();
+  static final OCBrowseFilesFlutter instance = OCBrowseFilesFlutter._();
 
-  BrowseFilesFlutterPlatform get _platform =>
-      BrowseFilesFlutterPlatform.instance;
+  OCBrowseFilesFlutterPlatform get _platform =>
+      OCBrowseFilesFlutterPlatform.instance;
 
   /// The current access level, without prompting.
-  Future<MediaPermissionStatus> permissionStatus({
-    Set<MediaType> types = kAllMediaTypes,
+  Future<OCMediaPermissionStatus> permissionStatus({
+    Set<OCMediaType> types = kAllMediaTypes,
   }) => _platform.permissionStatus(types: types);
 
   /// Prompts for library access and reports what the user granted.
   ///
-  /// Treat [MediaPermissionStatus.limited] as success: the user shared part of
+  /// Treat [OCMediaPermissionStatus.limited] as success: the user shared part of
   /// their library rather than refusing.
-  Future<MediaPermissionStatus> requestPermission({
-    Set<MediaType> types = kAllMediaTypes,
+  Future<OCMediaPermissionStatus> requestPermission({
+    Set<OCMediaType> types = kAllMediaTypes,
   }) => _platform.requestPermission(types: types);
 
   /// Opens this app's page in system settings, for when prompting is no longer
   /// possible.
   Future<bool> openSettings() => _platform.openSettings();
 
-  /// Shows the OS picker that widens a [MediaPermissionStatus.limited] grant.
-  Future<MediaPermissionStatus> presentLimitedPicker() =>
+  /// Shows the OS picker that widens a [OCMediaPermissionStatus.limited] grant.
+  Future<OCMediaPermissionStatus> presentLimitedPicker() =>
       _platform.presentLimitedPicker();
 
   /// The albums holding at least one asset of the given [types], the synthetic
   /// "all media" album first.
-  Future<List<MediaAlbum>> fetchAlbums({
-    Set<MediaType> types = kAllMediaTypes,
+  Future<List<OCMediaAlbum>> fetchAlbums({
+    Set<OCMediaType> types = kAllMediaTypes,
   }) => _platform.fetchAlbums(types: types);
 
   /// One page of an album, newest first; a `null` [albumId] means the whole
   /// library.
-  Future<MediaPage> fetchMedia({
+  Future<OCMediaPage> fetchMedia({
     String? albumId,
-    Set<MediaType> types = kAllMediaTypes,
+    Set<OCMediaType> types = kAllMediaTypes,
     int offset = 0,
     int limit = 50,
   }) => _platform.fetchMedia(
@@ -114,8 +114,8 @@ class BrowseFilesFlutter {
   Future<String> resolveFile(String id) => _platform.resolveFile(id);
 
   /// One page of the files this platform will list — never the whole device;
-  /// see [DocumentPage.enumerable].
-  Future<DocumentPage> fetchDocuments({
+  /// see [OCDocumentPage.enumerable].
+  Future<OCDocumentPage> fetchDocuments({
     List<String> mimeTypes = const [],
     int offset = 0,
     int limit = 50,

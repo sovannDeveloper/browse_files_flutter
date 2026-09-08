@@ -1,5 +1,5 @@
 /// Why a browse operation failed.
-enum BrowseFilesErrorCode {
+enum OCBrowseFilesErrorCode {
   /// The app may not read the media library. Check the permission status for
   /// whether prompting again is worth it.
   permissionDenied,
@@ -26,10 +26,10 @@ enum BrowseFilesErrorCode {
   unknown;
 
   /// Reads the wire representation used by the native side.
-  static BrowseFilesErrorCode fromName(String? name) =>
-      BrowseFilesErrorCode.values.firstWhere(
+  static OCBrowseFilesErrorCode fromName(String? name) =>
+      OCBrowseFilesErrorCode.values.firstWhere(
         (value) => value.name == name,
-        orElse: () => BrowseFilesErrorCode.unknown,
+        orElse: () => OCBrowseFilesErrorCode.unknown,
       );
 }
 
@@ -37,12 +37,12 @@ enum BrowseFilesErrorCode {
 ///
 /// Callers never see a raw `PlatformException` or `MissingPluginException`;
 /// both are translated into this type at the channel boundary.
-class BrowseFilesException implements Exception {
+class OCBrowseFilesException implements Exception {
   /// Creates an exception describing a failed operation.
-  const BrowseFilesException(this.code, this.message, {this.details});
+  const OCBrowseFilesException(this.code, this.message, {this.details});
 
   /// The machine-readable reason the operation failed.
-  final BrowseFilesErrorCode code;
+  final OCBrowseFilesErrorCode code;
 
   /// A human-readable description, suitable for logs.
   final String message;
@@ -54,7 +54,7 @@ class BrowseFilesException implements Exception {
   ///
   /// Worth checking before showing an error UI — a dismissed document picker
   /// is a normal outcome.
-  bool get isCancellation => code == BrowseFilesErrorCode.userCanceled;
+  bool get isCancellation => code == OCBrowseFilesErrorCode.userCanceled;
 
   @override
   String toString() =>

@@ -9,9 +9,9 @@ import 'media_type.dart';
 /// grid tile, and `resolveFile` when the asset has to become a real file the
 /// host app can read or upload.
 @immutable
-class MediaItem {
+class OCMediaItem {
   /// Creates a description of a library asset.
-  const MediaItem({
+  const OCMediaItem({
     required this.id,
     required this.type,
     required this.width,
@@ -24,11 +24,11 @@ class MediaItem {
   });
 
   /// Reconstructs an item from the platform channel representation.
-  factory MediaItem.fromMap(Map<Object?, Object?> map) {
+  factory OCMediaItem.fromMap(Map<Object?, Object?> map) {
     final durationMs = map['durationMs'] as int?;
-    return MediaItem(
+    return OCMediaItem(
       id: map['id']! as String,
-      type: MediaType.fromName(map['type'] as String?),
+      type: OCMediaType.fromName(map['type'] as String?),
       width: map['width'] as int? ?? 0,
       height: map['height'] as int? ?? 0,
       createdAt: DateTime.fromMillisecondsSinceEpoch(
@@ -49,7 +49,7 @@ class MediaItem {
   final String id;
 
   /// Whether this is an image or a video.
-  final MediaType type;
+  final OCMediaType type;
 
   /// Pixel width of the asset, or `0` if the platform did not report one.
   final int width;
@@ -60,7 +60,7 @@ class MediaItem {
   /// When the asset was created, used for the newest-first grid order.
   final DateTime createdAt;
 
-  /// Playing time, for videos only. Always `null` for [MediaType.image].
+  /// Playing time, for videos only. Always `null` for [OCMediaType.image].
   final Duration? duration;
 
   /// The asset's MIME type, when the platform reported one.
@@ -73,7 +73,7 @@ class MediaItem {
   final int? sizeBytes;
 
   /// Whether this item is a video, and so carries a [duration] badge.
-  bool get isVideo => type == MediaType.video;
+  bool get isVideo => type == OCMediaType.video;
 
   /// Width over height, or `1` when the platform reported no dimensions.
   double get aspectRatio => (width <= 0 || height <= 0) ? 1 : width / height;
@@ -94,7 +94,7 @@ class MediaItem {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is MediaItem && other.id == id && other.type == type;
+      other is OCMediaItem && other.id == id && other.type == type;
 
   @override
   int get hashCode => Object.hash(id, type);

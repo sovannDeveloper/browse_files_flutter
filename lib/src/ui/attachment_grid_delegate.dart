@@ -6,9 +6,9 @@ import 'package:flutter/rendering.dart';
 /// Flutter has no built-in delegate that lets one cell span rows, and pulling in
 /// a staggered-grid package for a single tile is not worth the dependency, so
 /// the layout is computed here.
-class AttachmentGridDelegate extends SliverGridDelegate {
+class OCAttachmentGridDelegate extends SliverGridDelegate {
   /// Creates the delegate.
-  const AttachmentGridDelegate({
+  const OCAttachmentGridDelegate({
     required this.crossAxisCount,
     this.spacing = 2,
     this.leadingRowSpan = 2,
@@ -37,7 +37,7 @@ class AttachmentGridDelegate extends SliverGridDelegate {
   }
 
   @override
-  bool shouldRelayout(AttachmentGridDelegate oldDelegate) =>
+  bool shouldRelayout(OCAttachmentGridDelegate oldDelegate) =>
       oldDelegate.crossAxisCount != crossAxisCount ||
       oldDelegate.spacing != spacing ||
       oldDelegate.leadingRowSpan != leadingRowSpan;

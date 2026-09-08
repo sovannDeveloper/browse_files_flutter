@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  final platform = MethodChannelBrowseFilesFlutter();
+  final platform = OCMethodChannelBrowseFilesFlutter();
   const channel = MethodChannel('com.kedtec.browse_files_flutter/methods');
   final calls = <MethodCall>[];
 
@@ -30,8 +30,8 @@ void main() {
       answerWith((_) async => 'limited');
 
       expect(
-        await platform.permissionStatus(types: const {MediaType.image}),
-        MediaPermissionStatus.limited,
+        await platform.permissionStatus(types: const {OCMediaType.image}),
+        OCMediaPermissionStatus.limited,
       );
       expect(calls.single.method, 'permissionStatus');
       expect(calls.single.arguments, {
@@ -93,10 +93,10 @@ void main() {
     expect(
       platform.resolveFile('1'),
       throwsA(
-        isA<BrowseFilesException>().having(
+        isA<OCBrowseFilesException>().having(
           (error) => error.code,
           'code',
-          BrowseFilesErrorCode.notFound,
+          OCBrowseFilesErrorCode.notFound,
         ),
       ),
     );
@@ -114,11 +114,11 @@ void main() {
     expect(
       platform.fetchAlbums(),
       throwsA(
-        isA<BrowseFilesException>()
+        isA<OCBrowseFilesException>()
             .having(
               (e) => e.code,
               'code',
-              BrowseFilesErrorCode.permissionDenied,
+              OCBrowseFilesErrorCode.permissionDenied,
             )
             .having((e) => e.message, 'message', 'no access')
             .having((e) => e.details, 'details', 'limited'),
@@ -132,10 +132,10 @@ void main() {
     expect(
       platform.openSettings(),
       throwsA(
-        isA<BrowseFilesException>().having(
+        isA<OCBrowseFilesException>().having(
           (error) => error.code,
           'code',
-          BrowseFilesErrorCode.unknown,
+          OCBrowseFilesErrorCode.unknown,
         ),
       ),
     );
@@ -147,10 +147,10 @@ void main() {
     expect(
       platform.permissionStatus(),
       throwsA(
-        isA<BrowseFilesException>().having(
+        isA<OCBrowseFilesException>().having(
           (error) => error.code,
           'code',
-          BrowseFilesErrorCode.unimplemented,
+          OCBrowseFilesErrorCode.unimplemented,
         ),
       ),
     );
