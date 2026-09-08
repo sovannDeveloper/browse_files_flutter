@@ -17,7 +17,47 @@ class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
   @override
-  Widget build(BuildContext context) => const MaterialApp(home: HomePage());
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Browse Files Flutter',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF2CB5A0),
+          brightness: Brightness.light,
+        ),
+        cardTheme: CardThemeData(
+          elevation: 2,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            elevation: 0,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        ),
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: OutlinedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          filled: true,
+        ),
+      ),
+      home: const HomePage(),
+    );
+  }
 }
 
 /// The harness screen.
@@ -37,6 +77,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final _plugin = BrowseFilesFlutter.instance;
   final _results = <String, String>{};
+  BrowseFilesResult? _lastResult;
 
   /// The access level last reported, or `null` while it is unknown: nothing
   /// asked yet, or the call itself failed.
@@ -140,12 +181,67 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         accentColor: const Color(0xFF2CB5A0),
         pageSize: 20,
         onCameraTap: _capture,
-        types: {MediaType.image},
+        types: {MediaType.image, MediaType.video},
         tabs: [AttachmentTab.gallery, AttachmentTab.file],
       ),
     );
     if (!mounted) return;
-    setState(() => _results['BrowseFiles.show'] = _describeResult(result));
+    setState(() {
+      _results['BrowseFiles.show'] = _describeResult(result);
+      _lastResult = result;
+    });
+    if (result != null && !result!.isEmpty) {
+      _showResultDialog();
+    }
+  }
+
+  void _showResultDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Selected Files'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (_lastResult!.media.isNotEmpty)
+                ..._lastResult!.media.map((item) => Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+                          child: const Icon(Icons.image),
+                        ),
+                        title: Text('Media: ${item.id}'),
+                        subtitle: Text('Type: ${item.type}'),
+                      ),
+                    )),
+              if (_lastResult!.documents.isNotEmpty)
+                ..._lastResult!.documents.map((path) => Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+                          child: const Icon(Icons.folder),
+                        ),
+                        title: Text('Document: $path'),
+                      ),
+                    )),
+              if (_lastResult!.media.isEmpty && _lastResult!.documents.isEmpty)
+                const Text('No files selected'),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
   }
 
   /// The full-screen browser: photos and videos in one tab, other files in the
@@ -209,67 +305,123 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     final labels = _results.keys.toList(growable: false);
     return Scaffold(
-      appBar: AppBar(title: const Text('browse_files_flutter')),
+      appBar: AppBar(
+        title: const Text('Browse Files Flutter'),
+        centerTitle: true,
+        elevation: 0,
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        foregroundColor: Theme.of(context).colorScheme.onSurface,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.info_outline),
+            onPressed: () => _showInfoDialog(context),
+          ),
+        ],
+      ),
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
-              spacing: 12,
               children: [
                 _permissionCard(context),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    FilledButton.icon(
-                      onPressed: _running ? null : _openSheet,
-                      icon: const Icon(Icons.attach_file, size: 18),
-                      label: const Text('Attach files'),
-                    ),
-                    FilledButton.tonalIcon(
-                      onPressed: _running ? null : _openPage,
-                      icon: const Icon(Icons.folder_copy_outlined, size: 18),
-                      label: const Text('Browse all files'),
-                    ),
-                    OutlinedButton(
-                      onPressed: _running ? null : _runAll,
-                      child: const Text('Run library calls'),
-                    ),
-                    OutlinedButton(
-                      onPressed: _running ? null : _probeThumbnail,
-                      child: const Text('Probe thumbnail'),
-                    ),
-                    OutlinedButton(
-                      onPressed: _running
-                          ? null
-                          : () => _run(
-                              'pickDocuments',
-                              () => _plugin.pickDocuments(),
-                            ),
-                      child: const Text('Pick documents'),
-                    ),
-                  ],
-                ),
+                const SizedBox(height: 16),
+                _actionButtons(context),
               ],
             ),
           ),
           const Divider(height: 1),
           Expanded(
             child: labels.isEmpty
-                ? const Center(child: Text('Nothing called yet.'))
+                ? const Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.inbox_outlined,
+                          size: 64,
+                          color: Colors.grey,
+                        ),
+                        SizedBox(height: 16),
+                        Text(
+                          'Nothing called yet',
+                          style: TextStyle(fontSize: 18, color: Colors.grey),
+                        ),
+                        Text(
+                          'Tap the buttons above to get started',
+                          style: TextStyle(fontSize: 14, color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  )
                 : ListView.separated(
                     itemCount: labels.length,
                     separatorBuilder: (_, _) => const Divider(height: 1),
-                    itemBuilder: (context, index) => ListTile(
-                      title: Text(labels[index]),
-                      subtitle: Text(_results[labels[index]]!),
+                    itemBuilder: (context, index) => _ResultItem(
+                      title: labels[index],
+                      subtitle: _results[labels[index]]!,
                     ),
                   ),
           ),
         ],
       ),
+    );
+  }
+
+  void _showInfoDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('About'),
+        content: const Text(
+          'Browse Files Flutter is a platform API harness for file and media selection.\n\n'
+          'This example app demonstrates the plugin\'s capabilities including:\n'
+          '• File and media browsing\n'
+          '• Permission management\n'
+          '• Thumbnail loading\n'
+          '• Camera integration',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _actionButtons(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        FilledButton.icon(
+          onPressed: _running ? null : _openSheet,
+          icon: const Icon(Icons.attach_file, size: 20),
+          label: const Text('Attach files'),
+        ),
+        FilledButton.tonalIcon(
+          onPressed: _running ? null : _openPage,
+          icon: const Icon(Icons.folder_copy_outlined, size: 20),
+          label: const Text('Browse all files'),
+        ),
+        OutlinedButton(
+          onPressed: _running ? null : _runAll,
+          child: const Text('Run library calls'),
+        ),
+        OutlinedButton(
+          onPressed: _running ? null : _probeThumbnail,
+          child: const Text('Probe thumbnail'),
+        ),
+        OutlinedButton(
+          onPressed: _running
+              ? null
+              : () => _run('pickDocuments', () => _plugin.pickDocuments()),
+          child: const Text('Pick documents'),
+        ),
+      ],
     );
   }
 
@@ -282,26 +434,38 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final status = _permission;
     final next = _recommendedCall(status);
     return Card(
-      margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          spacing: 8,
           children: [
             Row(
-              spacing: 8,
               children: [
-                Icon(_statusIcon(status), color: _statusColor(theme, status)),
-                Text(
-                  status?.name ?? 'unknown',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: _statusColor(theme, status),
+                Icon(
+                  _statusIcon(status),
+                  color: _statusColor(theme, status),
+                  size: 24,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    status?.name ?? 'unknown',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: _statusColor(theme, status),
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ],
             ),
-            Text(_describe(status), style: theme.textTheme.bodySmall),
+            const SizedBox(height: 8),
+            Text(
+              _describe(status),
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurface.withOpacity(0.7),
+              ),
+            ),
+            const SizedBox(height: 16),
             Wrap(
               spacing: 8,
               runSpacing: 8,
@@ -401,4 +565,42 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         _ when status.canBrowse => theme.colorScheme.primary,
         _ => theme.colorScheme.error,
       };
+}
+
+/// A list item to display results.
+class _ResultItem extends StatelessWidget {
+  final String title;
+  final String subtitle;
+
+  const _ResultItem({required this.title, required this.subtitle});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+          child: Icon(
+            Icons.list_alt,
+            color: Theme.of(context).colorScheme.onPrimaryContainer,
+          ),
+        ),
+        title: Text(title, style: Theme.of(context).textTheme.titleMedium),
+        subtitle: Text(
+          subtitle,
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+          ),
+        ),
+        trailing: subtitle.contains('running')
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : null,
+      ),
+    );
+  }
 }
