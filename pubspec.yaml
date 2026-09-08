@@ -15,6 +15,8 @@ dependencies:
   plugin_platform_interface: ^2.0.2
   division:
     git: https://github.com/sovannDeveloper/division.git
+  flu_wake_lock:
+    git: https://github.com/sovannDeveloper/wakelock.git
 
 dev_dependencies:
   flutter_test:

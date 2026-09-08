@@ -64,9 +64,11 @@ void main() {
     await tester.tap(find.text('Files'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Files this app can see'), findsOneWidget);
+    expect(find.text('Internal Storage'), findsOneWidget);
+    expect(find.text('Browse your file system'), findsOneWidget);
+    expect(find.text('Recent files'), findsOneWidget);
     expect(find.textContaining('behind its own picker'), findsOneWidget);
-    expect(find.textContaining('Nothing listed yet'), findsOneWidget);
+    expect(find.textContaining('No recent files'), findsOneWidget);
   });
 
   testWidgets('the picker adds what it returns, already selected', (
@@ -77,7 +79,7 @@ void main() {
     await _open(tester);
     await tester.tap(find.text('Files'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Browse'));
+    await tester.tap(find.text('Internal Storage'));
     await tester.pumpAndSettle();
 
     expect(find.text('contract.pdf'), findsOneWidget);
@@ -96,7 +98,7 @@ void main() {
     );
     await tester.tap(find.text('Files'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Browse'));
+    await tester.tap(find.text('Internal Storage'));
     await tester.pumpAndSettle();
 
     expect(platform.listedWith, filter);
@@ -209,6 +211,13 @@ class _FakePlatform extends BrowseFilesFlutterPlatform {
   Future<MediaPermissionStatus> permissionStatus({
     Set<MediaType> types = kAllMediaTypes,
   }) async => MediaPermissionStatus.granted;
+
+  @override
+  Future<List<MediaAlbum>> fetchAlbums({
+    Set<MediaType> types = kAllMediaTypes,
+  }) async => <MediaAlbum>[
+    MediaAlbum(id: 'all', name: 'All media', count: mediaTotal, isAll: true),
+  ];
 
   @override
   Future<MediaPage> fetchMedia({

@@ -192,58 +192,67 @@ class _DocumentListState extends State<DocumentList> {
     );
   }
 
+  /// The storage entry that opens the system picker, and the heading for the
+  /// listing under it.
   Widget _header(BuildContext context) {
     final theme = Theme.of(context);
     final error = _error;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        spacing: 8,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  _enumerable
-                      ? 'Files on this device'
-                      : 'Files this app can see',
-                  style: theme.textTheme.titleSmall,
-                ),
-              ),
-              FilledButton.tonalIcon(
-                onPressed: _picking ? null : _pick,
-                icon: const Icon(Icons.folder_open_outlined, size: 18),
-                label: Text(_picking ? 'Opening…' : 'Browse'),
-              ),
-            ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ListTile(
+          onTap: _picking ? null : _pick,
+          leading: CircleAvatar(
+            backgroundColor: theme.colorScheme.primaryContainer,
+            foregroundColor: theme.colorScheme.onPrimaryContainer,
+            child: const Icon(Icons.smartphone_outlined),
           ),
-          if (!_enumerable)
-            Text(
-              'The system keeps the rest of your storage behind its own '
-              'picker: Android 11 scoped it and iOS never opened it. Tap '
-              'Browse to reach anything that is not listed here.',
-              style: theme.textTheme.bodySmall,
-            ),
-          if (error != null)
-            Text(
-              error,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.error,
-              ),
-            ),
-          if (_items.isEmpty && !_busy)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 24),
-              child: Center(
-                child: Text(
-                  'Nothing listed yet — pick something with Browse.',
+          title: const Text('Internal Storage'),
+          subtitle: const Text('Browse your file system'),
+          trailing: _picking
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.chevron_right),
+        ),
+        const Divider(height: 1),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: 8,
+            children: [
+              Text('Recent files', style: theme.textTheme.titleSmall),
+              if (!_enumerable)
+                Text(
+                  'The system keeps the rest of your storage behind its own '
+                  'picker: Android 11 scoped it and iOS never opened it. Tap '
+                  'Internal Storage to reach anything that is not listed here.',
                   style: theme.textTheme.bodySmall,
                 ),
-              ),
-            ),
-        ],
-      ),
+              if (error != null)
+                Text(
+                  error,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.error,
+                  ),
+                ),
+              if (_items.isEmpty && !_busy)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 24),
+                  child: Center(
+                    child: Text(
+                      'No recent files — open Internal Storage to pick one.',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

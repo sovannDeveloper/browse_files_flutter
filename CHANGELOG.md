@@ -81,3 +81,13 @@
 * The example harness gained a "Probe thumbnail" button: it asks for one asset's thumbnail and
   reports the byte count and how long it took, or the error — the way to tell a slow platform
   from a broken one without reading the grid's mind.
+* The Files tab leads with an "Internal Storage / Browse your file system" row that opens the
+  system picker, and lists what the platform can enumerate under a "Recent files" heading —
+  the storage entry the user expects rather than a header with a Browse button beside it.
+* The Gallery tab gained a group selector: a top bar naming the open album and its item count,
+  with a menu of the albums `fetchAlbums` reports. Picking one repages the grid from that
+  album (`fetchMedia(albumId:)`, which the grid had never passed). The bar stays hidden when
+  the platform reports a single album, and a platform that cannot list albums quietly gets no
+  bar instead of an error panel. Each entry in the menu carries its album's cover thumbnail —
+  the `coverId` both platforms already reported and nothing drew — through the same bounded
+  cache the tiles use.

@@ -1,8 +1,12 @@
+import 'dart:async';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
 import '../browse_files_flutter_platform_interface.dart';
 import '../models/browse_files_exception.dart';
 import '../models/browse_files_options.dart';
+import '../models/media_album.dart';
 import '../models/media_item.dart';
 import '../models/media_permission.dart';
 import 'attachment_grid_delegate.dart';
@@ -62,6 +66,12 @@ class _MediaGridState extends State<MediaGrid> with WidgetsBindingObserver {
   /// after the change, and a grid keyed by asset id throws on the duplicate.
   final Set<String> _ids = <String>{};
 
+  /// The albums the top bar switches between, and the open one. Empty until
+  /// the platform answers, and left empty when it cannot list albums at all —
+  /// the grid works the same, it just gets no group selector.
+  List<MediaAlbum> _albums = const <MediaAlbum>[];
+  MediaAlbum? _album;
+
   MediaPermissionStatus? _permission;
   int _total = 0;
   bool _loadingPage = false;
@@ -72,6 +82,10 @@ class _MediaGridState extends State<MediaGrid> with WidgetsBindingObserver {
       BrowseFilesFlutterPlatform.instance;
 
   bool get _hasMore => _items.length < _total;
+
+  /// The album to page, or `null` for the whole library — the synthetic "all
+  /// media" entry is the platform's way of saying "no filter".
+  String? get _albumId => (_album?.isAll ?? true) ? null : _album!.id;
 
   @override
   void initState() {
@@ -102,6 +116,7 @@ class _MediaGridState extends State<MediaGrid> with WidgetsBindingObserver {
   Future<void> _refresh() async {
     final page = await _guard(
       () => _platform.fetchMedia(
+        albumId: _albumId,
         types: widget.options.types,
         offset: 0,
         limit: widget.options.pageSize,
@@ -151,7 +166,10 @@ class _MediaGridState extends State<MediaGrid> with WidgetsBindingObserver {
       _permission = status;
       _busy = false;
     });
-    if (status.canBrowse) await _loadMore(reset: true);
+    if (status.canBrowse) {
+      await _loadMore(reset: true);
+      unawaited(_loadAlbums());
+    }
   }
 
   Future<void> _request() async {
@@ -164,7 +182,10 @@ class _MediaGridState extends State<MediaGrid> with WidgetsBindingObserver {
       _permission = status ?? _permission;
       _busy = false;
     });
-    if (status != null && status.canBrowse) await _loadMore(reset: true);
+    if (status != null && status.canBrowse) {
+      await _loadMore(reset: true);
+      unawaited(_loadAlbums());
+    }
   }
 
   Future<void> _selectMore() async {
@@ -173,6 +194,62 @@ class _MediaGridState extends State<MediaGrid> with WidgetsBindingObserver {
     setState(() => _permission = status);
     // The shared subset has changed, so everything paged in so far is stale.
     widget.cache.clear();
+    await _loadMore(reset: true);
+    unawaited(_loadAlbums());
+  }
+
+  /// Reads the album list for the top bar, after the first page is on screen.
+  ///
+  /// Never awaited ahead of the grid: listing albums means walking every row
+  /// in the library — MediaStore has no GROUP BY — so a library of any size
+  /// would hold the first page, and with it every thumbnail on it, behind a
+  /// full scan. That is what made a first open paint an empty grid while a
+  /// second one, reading the same warm caches, filled instantly.
+  ///
+  /// A platform that will not list albums is not an error the user can act on
+  /// — the grid still shows the whole library — so this fails quietly into no
+  /// selector rather than into the error panel [_guard] would raise.
+  Future<void> _loadAlbums() async {
+    final List<MediaAlbum> albums;
+    try {
+      albums = await _platform.fetchAlbums(types: widget.options.types);
+    } on BrowseFilesException {
+      return;
+    }
+    if (!mounted) return;
+    // Covers are asked for at the tiles' size, so an album whose cover is
+    // already on the grid costs nothing, and the menu is warm before it opens
+    // rather than starting a decode per row when it does.
+    final size = widget.options.thumbnailSize;
+    widget.cache.prefetch(
+      <String>[
+        for (final album in albums)
+          if (album.coverId != null) album.coverId!,
+      ],
+      width: size,
+      height: size,
+    );
+    setState(() {
+      _albums = albums;
+      // Keep the open album across a re-read; it is gone from the list when
+      // its last asset was deleted, and then the library is where to land.
+      _album = albums.contains(_album)
+          ? albums.firstWhere((album) => album == _album)
+          : (albums.isEmpty ? null : albums.first);
+    });
+  }
+
+  /// Switches the grid to another album, from the first page down.
+  Future<void> _selectAlbum(MediaAlbum album) async {
+    if (album == _album) return;
+    setState(() {
+      _album = album;
+      _items.clear();
+      _ids.clear();
+      _total = 0;
+      _busy = true;
+      _error = null;
+    });
     await _loadMore(reset: true);
   }
 
@@ -189,6 +266,7 @@ class _MediaGridState extends State<MediaGrid> with WidgetsBindingObserver {
     final offset = reset ? 0 : _items.length;
     final page = await _guard(
       () => _platform.fetchMedia(
+        albumId: _albumId,
         types: widget.options.types,
         offset: offset,
         limit: widget.options.pageSize,
@@ -242,6 +320,27 @@ class _MediaGridState extends State<MediaGrid> with WidgetsBindingObserver {
         onOpenSettings: _openSettings,
       );
     }
+    return Column(
+      children: [
+        // Above the banner: which album is open outranks how much of the
+        // library was shared, and an empty album must still be switchable.
+        if (_albums.length > 1)
+          _AlbumBar(
+            albums: _albums,
+            album: _album,
+            cache: widget.cache,
+            thumbnailSize: widget.options.thumbnailSize,
+            onSelected: _selectAlbum,
+          ),
+        if (permission == MediaPermissionStatus.limited)
+          _LimitedBanner(onSelectMore: _selectMore),
+        Expanded(child: _content()),
+      ],
+    );
+  }
+
+  /// The grid, or what stands in for it while it is empty.
+  Widget _content() {
     final error = _error;
     if (error != null && _items.isEmpty) {
       return _Centered(
@@ -254,22 +353,19 @@ class _MediaGridState extends State<MediaGrid> with WidgetsBindingObserver {
         ),
       );
     }
-    if (_items.isEmpty && !_busy) {
-      return const _Centered(
-        child: _Message(
-          icon: Icons.photo_outlined,
-          title: 'Nothing here yet',
-          detail: 'Photos and videos on this device show up in this grid.',
-        ),
-      );
+    if (_items.isEmpty) {
+      return _busy
+          ? const _Centered(child: CircularProgressIndicator())
+          : const _Centered(
+              child: _Message(
+                icon: Icons.photo_outlined,
+                title: 'Nothing here yet',
+                detail:
+                    'Photos and videos on this device show up in this grid.',
+              ),
+            );
     }
-    return Column(
-      children: [
-        if (permission == MediaPermissionStatus.limited)
-          _LimitedBanner(onSelectMore: _selectMore),
-        Expanded(child: _grid()),
-      ],
-    );
+    return _grid();
   }
 
   Widget _grid() {
@@ -323,6 +419,209 @@ class _MediaGridState extends State<MediaGrid> with WidgetsBindingObserver {
           onTap: () => widget.onToggle(item),
         );
       },
+    );
+  }
+}
+
+/// The top bar of the gallery: which group of media the grid is showing, and
+/// the menu that switches it.
+class _AlbumBar extends StatelessWidget {
+  const _AlbumBar({
+    required this.albums,
+    required this.album,
+    required this.cache,
+    required this.thumbnailSize,
+    required this.onSelected,
+  });
+
+  final List<MediaAlbum> albums;
+  final MediaAlbum? album;
+  final ThumbnailCache cache;
+
+  /// The size covers are requested at — the tiles' size, so the two share
+  /// cache entries instead of each decoding the same asset.
+  final int thumbnailSize;
+
+  final ValueChanged<MediaAlbum> onSelected;
+
+  /// How large a cover is drawn in the menu.
+  static const double _coverExtent = 44;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final current = album ?? albums.first;
+    return Material(
+      color: theme.colorScheme.surface,
+      child: Row(
+        children: [
+          Flexible(
+            child: PopupMenuButton<MediaAlbum>(
+              initialValue: current,
+              onSelected: onSelected,
+              tooltip: 'Choose an album',
+              position: PopupMenuPosition.under,
+              constraints: const BoxConstraints(minWidth: 260, maxWidth: 340),
+              itemBuilder: (context) => <PopupMenuEntry<MediaAlbum>>[
+                for (final entry in albums)
+                  PopupMenuItem<MediaAlbum>(
+                    value: entry,
+                    height: 60,
+                    child: Row(
+                      spacing: 14,
+                      children: [
+                        _AlbumCover(
+                          album: entry,
+                          cache: cache,
+                          size: thumbnailSize,
+                          extent: _coverExtent,
+                        ),
+                        Flexible(
+                          child: Text(
+                            entry.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleMedium,
+                          ),
+                        ),
+                        Text(
+                          '${entry.count}',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 12, 10),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  spacing: 4,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        current.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleSmall,
+                      ),
+                    ),
+                    const Icon(Icons.arrow_drop_down, size: 20),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const Spacer(),
+          Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: Text(
+              current.count == 1 ? '1 item' : '${current.count} items',
+              style: theme.textTheme.bodySmall,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One album's cover in the menu: the same thumbnail pipeline the tiles use,
+/// keyed by the album's cover asset.
+///
+/// An album the platform gave no cover for — and one whose cover it cannot
+/// make a thumbnail of — draws the placeholder rather than nothing, so every
+/// row keeps the same shape.
+class _AlbumCover extends StatefulWidget {
+  const _AlbumCover({
+    required this.album,
+    required this.cache,
+    required this.size,
+    required this.extent,
+  });
+
+  final MediaAlbum album;
+  final ThumbnailCache cache;
+  final int size;
+  final double extent;
+
+  @override
+  State<_AlbumCover> createState() => _AlbumCoverState();
+}
+
+class _AlbumCoverState extends State<_AlbumCover> {
+  Uint8List? _bytes;
+
+  @override
+  void initState() {
+    super.initState();
+    final coverId = widget.album.coverId;
+    if (coverId == null) return;
+    _bytes = widget.cache.peek(
+      coverId,
+      width: widget.size,
+      height: widget.size,
+    );
+    // The grid prefetches every cover when the album list lands, so the bytes
+    // this row wants are usually already on their way; the listener paints
+    // them whoever asked for them.
+    widget.cache.changes.addListener(_onCacheChange);
+    if (_bytes == null) _load(coverId);
+  }
+
+  @override
+  void dispose() {
+    widget.cache.changes.removeListener(_onCacheChange);
+    super.dispose();
+  }
+
+  void _onCacheChange() {
+    final coverId = widget.album.coverId;
+    if (_bytes != null || coverId == null) return;
+    final bytes = widget.cache.peek(
+      coverId,
+      width: widget.size,
+      height: widget.size,
+    );
+    if (bytes == null || bytes.isEmpty || !mounted) return;
+    setState(() => _bytes = bytes);
+  }
+
+  Future<void> _load(String coverId) async {
+    try {
+      final bytes = await widget.cache.load(
+        coverId,
+        width: widget.size,
+        height: widget.size,
+      );
+      if (!mounted || bytes == null || bytes.isEmpty) return;
+      setState(() => _bytes = bytes);
+    } on Object {
+      // A cover that will not load is a placeholder, not a broken menu.
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bytes = _bytes;
+    final scheme = Theme.of(context).colorScheme;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(6),
+      child: SizedBox.square(
+        dimension: widget.extent,
+        child: bytes == null
+            ? ColoredBox(
+                color: scheme.surfaceContainerHighest,
+                child: Icon(
+                  Icons.photo_outlined,
+                  size: 18,
+                  color: scheme.onSurfaceVariant,
+                ),
+              )
+            : Image.memory(bytes, fit: BoxFit.cover, gaplessPlayback: true),
+      ),
     );
   }
 }

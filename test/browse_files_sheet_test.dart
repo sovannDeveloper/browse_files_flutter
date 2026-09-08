@@ -31,6 +31,40 @@ void main() {
     expect(harness.result, isNull, reason: 'nothing confirmed yet');
   });
 
+  testWidgets('the gallery bar switches the grid to another album', (
+    tester,
+  ) async {
+    platform
+      ..total = 12
+      ..albums = <MediaAlbum>[
+        const MediaAlbum(id: 'all', name: 'All media', count: 12, isAll: true),
+        const MediaAlbum(id: 'camera', name: 'Camera', count: 4),
+      ];
+
+    await _open(tester);
+
+    expect(find.text('All media'), findsOneWidget);
+    expect(find.text('12 items'), findsOneWidget);
+    expect(platform.fetchedAlbumIds, [null]);
+
+    await tester.tap(find.text('All media'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Camera').last);
+    await tester.pumpAndSettle();
+
+    expect(platform.fetchedAlbumIds.last, 'camera');
+    expect(find.text('Camera'), findsOneWidget);
+    expect(find.text('4 items'), findsOneWidget);
+  });
+
+  testWidgets('one album leaves the gallery bar off', (tester) async {
+    platform.total = 6;
+
+    await _open(tester);
+
+    expect(find.text('All media'), findsNothing);
+  });
+
   testWidgets('pages the library in as the grid is scrolled', (tester) async {
     platform.total = 130;
 
@@ -466,6 +500,12 @@ class _FakePlatform extends BrowseFilesFlutterPlatform {
       <({int offset, int limit})>[];
   final List<String> thumbnailRequests = <String>[];
 
+  /// The albums the top bar offers; one entry keeps the bar hidden.
+  List<MediaAlbum>? albums;
+
+  /// Which album each page was asked for, `null` for the whole library.
+  final List<String?> fetchedAlbumIds = <String?>[];
+
   @override
   Future<MediaPermissionStatus> permissionStatus({
     Set<MediaType> types = kAllMediaTypes,
@@ -494,9 +534,11 @@ class _FakePlatform extends BrowseFilesFlutterPlatform {
   @override
   Future<List<MediaAlbum>> fetchAlbums({
     Set<MediaType> types = kAllMediaTypes,
-  }) async => <MediaAlbum>[
-    MediaAlbum(id: 'all', name: 'All media', count: total, isAll: true),
-  ];
+  }) async =>
+      albums ??
+      <MediaAlbum>[
+        MediaAlbum(id: 'all', name: 'All media', count: total, isAll: true),
+      ];
 
   @override
   Future<MediaPage> fetchMedia({
@@ -506,6 +548,7 @@ class _FakePlatform extends BrowseFilesFlutterPlatform {
     int limit = 50,
   }) async {
     fetchedPages.add((offset: offset, limit: limit));
+    fetchedAlbumIds.add(albumId);
     // Assets added while the grid is being paged push everything down, so a
     // later page hands back rows an earlier one already carried.
     final start = offset == 0 ? 0 : (offset - overlap).clamp(0, total);

@@ -1,10 +1,13 @@
 import 'package:browse_files_flutter/browse_files_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flu_wake_lock/flu_wake_lock.dart';
 
 import 'example_camera.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  FluWakeLock().enable();
   runApp(const MyApp());
 }
 
@@ -207,28 +210,36 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (_lastResult!.media.isNotEmpty)
-                ..._lastResult!.media.map((item) => Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-                          child: const Icon(Icons.image),
-                        ),
-                        title: Text('Media: ${item.id}'),
-                        subtitle: Text('Type: ${item.type}'),
+                ..._lastResult!.media.map(
+                  (item) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: Theme.of(
+                          context,
+                        ).colorScheme.primaryContainer,
+                        child: const Icon(Icons.image),
                       ),
-                    )),
+                      title: Text('Media: ${item.id}'),
+                      subtitle: Text('Type: ${item.type}'),
+                    ),
+                  ),
+                ),
               if (_lastResult!.documents.isNotEmpty)
-                ..._lastResult!.documents.map((path) => Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-                          child: const Icon(Icons.folder),
-                        ),
-                        title: Text('Document: $path'),
+                ..._lastResult!.documents.map(
+                  (path) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: Theme.of(
+                          context,
+                        ).colorScheme.primaryContainer,
+                        child: const Icon(Icons.folder),
                       ),
-                    )),
+                      title: Text('Document: $path'),
+                    ),
+                  ),
+                ),
               if (_lastResult!.media.isEmpty && _lastResult!.documents.isEmpty)
                 const Text('No files selected'),
             ],

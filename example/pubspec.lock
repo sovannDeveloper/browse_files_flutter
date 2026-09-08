@@ -81,6 +81,15 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "7.0.1"
+  flu_wake_lock:
+    dependency: transitive
+    description:
+      path: "."
+      ref: HEAD
+      resolved-ref: baac1f74b1cd17189cef7f52a5f04f01f0b5ba36
+      url: "https://github.com/sovannDeveloper/wakelock.git"
+    source: git
+    version: "0.0.2"
   flutter:
     dependency: "direct main"
     description: flutter
