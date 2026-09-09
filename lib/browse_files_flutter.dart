@@ -30,6 +30,7 @@ export 'src/models/attachment_tab.dart';
 export 'src/models/browse_files_exception.dart';
 export 'src/models/browse_files_options.dart';
 export 'src/models/browse_files_result.dart';
+export 'src/models/browse_files_strings.dart';
 export 'src/models/document_item.dart';
 export 'src/models/document_page.dart';
 export 'src/models/media_album.dart';

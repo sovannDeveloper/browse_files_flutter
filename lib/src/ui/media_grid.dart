@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../browse_files_flutter_platform_interface.dart';
 import '../models/browse_files_exception.dart';
 import '../models/browse_files_options.dart';
+import '../models/browse_files_strings.dart';
 import '../models/media_album.dart';
 import '../models/media_item.dart';
 import '../models/media_permission.dart';
@@ -311,11 +312,13 @@ class _OCMediaGridState extends State<OCMediaGrid> with WidgetsBindingObserver {
     if (_busy && _items.isEmpty && permission == null) {
       return const _Centered(child: CircularProgressIndicator());
     }
+    final strings = widget.options.text;
     if (permission != null && !permission.canBrowse) {
       return _PermissionPanel(
         status: permission,
         busy: _busy,
         error: _error,
+        strings: strings,
         onRequest: _request,
         onOpenSettings: _openSettings,
       );
@@ -330,10 +333,11 @@ class _OCMediaGridState extends State<OCMediaGrid> with WidgetsBindingObserver {
             album: _album,
             cache: widget.cache,
             thumbnailSize: widget.options.thumbnailSize,
+            strings: strings,
             onSelected: _selectAlbum,
           ),
         if (permission == OCMediaPermissionStatus.limited)
-          _LimitedBanner(onSelectMore: _selectMore),
+          _LimitedBanner(strings: strings, onSelectMore: _selectMore),
         Expanded(child: _content()),
       ],
     );
@@ -342,13 +346,14 @@ class _OCMediaGridState extends State<OCMediaGrid> with WidgetsBindingObserver {
   /// The grid, or what stands in for it while it is empty.
   Widget _content() {
     final error = _error;
+    final strings = widget.options.text;
     if (error != null && _items.isEmpty) {
       return _Centered(
         child: _Message(
           icon: Icons.error_outline,
-          title: 'The library could not be read',
+          title: strings.galleryErrorTitle,
           detail: error,
-          actionLabel: 'Try again',
+          actionLabel: strings.retryLabel,
           onAction: () => _loadMore(reset: true),
         ),
       );
@@ -356,12 +361,11 @@ class _OCMediaGridState extends State<OCMediaGrid> with WidgetsBindingObserver {
     if (_items.isEmpty) {
       return _busy
           ? const _Centered(child: CircularProgressIndicator())
-          : const _Centered(
+          : _Centered(
               child: _Message(
                 icon: Icons.photo_outlined,
-                title: 'Nothing here yet',
-                detail:
-                    'Photos and videos on this device show up in this grid.',
+                title: strings.galleryEmptyTitle,
+                detail: strings.galleryEmptyDetail,
               ),
             );
     }
@@ -431,6 +435,7 @@ class _AlbumBar extends StatelessWidget {
     required this.album,
     required this.cache,
     required this.thumbnailSize,
+    required this.strings,
     required this.onSelected,
   });
 
@@ -441,6 +446,9 @@ class _AlbumBar extends StatelessWidget {
   /// The size covers are requested at — the tiles' size, so the two share
   /// cache entries instead of each decoding the same asset.
   final int thumbnailSize;
+
+  /// The bar's own wording: the selector's tooltip and the item count.
+  final OCBrowseFilesStrings strings;
 
   final ValueChanged<OCMediaAlbum> onSelected;
 
@@ -459,7 +467,7 @@ class _AlbumBar extends StatelessWidget {
             child: PopupMenuButton<OCMediaAlbum>(
               initialValue: current,
               onSelected: onSelected,
-              tooltip: 'Choose an album',
+              tooltip: strings.albumMenuTooltip,
               position: PopupMenuPosition.under,
               constraints: const BoxConstraints(minWidth: 260, maxWidth: 340),
               itemBuilder: (context) => <PopupMenuEntry<OCMediaAlbum>>[
@@ -518,7 +526,7 @@ class _AlbumBar extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(right: 16),
             child: Text(
-              current.count == 1 ? '1 item' : '${current.count} items',
+              strings.albumItemCount(current.count),
               style: theme.textTheme.bodySmall,
             ),
           ),
@@ -645,8 +653,9 @@ class _LoadingCell extends StatelessWidget {
 
 /// The strip shown above the grid when only part of the library is shared.
 class _LimitedBanner extends StatelessWidget {
-  const _LimitedBanner({required this.onSelectMore});
+  const _LimitedBanner({required this.strings, required this.onSelectMore});
 
+  final OCBrowseFilesStrings strings;
   final VoidCallback onSelectMore;
 
   @override
@@ -659,14 +668,17 @@ class _LimitedBanner extends StatelessWidget {
         children: [
           Expanded(
             child: Text(
-              'You shared some of your library',
+              strings.limitedAccessMessage,
               style: TextStyle(
                 color: scheme.onSecondaryContainer,
                 fontSize: 12,
               ),
             ),
           ),
-          TextButton(onPressed: onSelectMore, child: const Text('Select more')),
+          TextButton(
+            onPressed: onSelectMore,
+            child: Text(strings.selectMoreLabel),
+          ),
         ],
       ),
     );
@@ -732,6 +744,7 @@ class _PermissionPanel extends StatelessWidget {
     required this.status,
     required this.busy,
     required this.error,
+    required this.strings,
     required this.onRequest,
     required this.onOpenSettings,
   });
@@ -739,6 +752,7 @@ class _PermissionPanel extends StatelessWidget {
   final OCMediaPermissionStatus status;
   final bool busy;
   final String? error;
+  final OCBrowseFilesStrings strings;
   final VoidCallback onRequest;
   final VoidCallback onOpenSettings;
 
@@ -749,17 +763,18 @@ class _PermissionPanel extends StatelessWidget {
       child: _Message(
         icon: needsSettings ? Icons.lock_outline : Icons.photo_library_outlined,
         title: needsSettings
-            ? 'Photo access is turned off'
-            : 'Let this app see your photos',
+            ? strings.permissionDeniedTitle
+            : strings.permissionTitle,
         detail:
             error ??
             (needsSettings
-                ? 'Turn photo access on in Settings and come back.'
-                : 'Your photos and videos stay on the device; nothing is '
-                      'uploaded by this sheet.'),
+                ? strings.permissionDeniedDetail
+                : strings.permissionDetail),
         actionLabel: busy
             ? null
-            : (needsSettings ? 'Open settings' : 'Allow access'),
+            : (needsSettings
+                  ? strings.openSettingsLabel
+                  : strings.permissionAllowLabel),
         onAction: needsSettings ? onOpenSettings : onRequest,
       ),
     );

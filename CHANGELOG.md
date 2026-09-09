@@ -91,3 +91,12 @@
   bar instead of an error panel. Each entry in the menu carries its album's cover thumbnail —
   the `coverId` both platforms already reported and nothing drew — through the same bounded
   cache the tiles use.
+* Every string the sheet draws is now overridable: `OCBrowseFilesOptions.strings` takes an
+  `OCBrowseFilesStrings`, which carries each label, heading and empty-state line, plus three
+  builders for the text that has numbers in it (`confirmButton`, `selectionSummary`,
+  `albumItemCount`). Anything left out keeps the English default, so a host app that only
+  wants to translate the confirm button says so and nothing else. The bottom row's captions
+  stay on the tabs themselves — `OCAttachmentTab.gallery.withLabel('Galerie')` renames a
+  built-in tab without changing its id, so this package still draws its body.
+* `OCBrowseFilesOptions.confirmLabel` and `BrowseFiles.showPage(title:)` are now nullable and
+  default to the matching string; passing one still wins, so existing calls are unaffected.

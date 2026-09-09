@@ -434,6 +434,62 @@ void main() {
       isNot(black),
     );
   });
+
+  testWidgets('custom strings replace the sheet\'s own wording', (
+    tester,
+  ) async {
+    platform
+      ..total = 12
+      ..albums = <OCMediaAlbum>[
+        const OCMediaAlbum(id: 'all', name: 'Tout', count: 12, isAll: true),
+        const OCMediaAlbum(id: 'camera', name: 'Appareil photo', count: 4),
+      ];
+
+    await _open(
+      tester,
+      options: OCBrowseFilesOptions(
+        strings: OCBrowseFilesStrings(
+          confirmLabel: 'Envoyer',
+          albumItemCount: (count) => '$count éléments',
+          selectionSummary: (media, documents, max) =>
+              '$media sur $max sélectionnés',
+        ),
+        tabs: <OCAttachmentTab>[
+          OCAttachmentTab.gallery.withLabel('Galerie'),
+          OCAttachmentTab.file.withLabel('Fichier'),
+        ],
+      ),
+    );
+
+    expect(find.text('12 éléments'), findsOneWidget);
+    expect(find.text('Galerie'), findsOneWidget);
+    expect(find.text('Fichier'), findsOneWidget);
+
+    await tester.tap(find.byType(OCMediaTile).first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Envoyer (1)'), findsOneWidget);
+    expect(find.text('1 sur 10 sélectionnés'), findsOneWidget);
+  });
+
+  testWidgets('options.confirmLabel still wins over the strings', (
+    tester,
+  ) async {
+    platform.total = 3;
+
+    await _open(
+      tester,
+      options: const OCBrowseFilesOptions(
+        confirmLabel: 'Send',
+        strings: OCBrowseFilesStrings(confirmLabel: 'Envoyer'),
+      ),
+    );
+
+    await tester.tap(find.byType(OCMediaTile).first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Send (1)'), findsOneWidget);
+  });
 }
 
 Widget _pollBody(BuildContext context) =>

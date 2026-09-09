@@ -56,7 +56,7 @@ class OCBrowseFiles {
     BuildContext context, {
     OCBrowseFilesOptions options = const OCBrowseFilesOptions(),
     OCThumbnailCache? cache,
-    String title = 'Attach',
+    String? title,
   }) {
     assert(Navigator.maybeOf(context) != null, _noNavigator);
     return Navigator.of(context).push<OCBrowseFilesResult>(
@@ -343,6 +343,7 @@ class _BrowseFilesSheetState extends State<BrowseFilesSheet> {
 
   Widget _confirmBar(ThemeData theme) {
     final error = _error;
+    final strings = _options.text;
     return Parent(
       style: ParentStyle()
         ..background.color(_barColor(theme))
@@ -355,8 +356,11 @@ class _BrowseFilesSheetState extends State<BrowseFilesSheet> {
           Expanded(
             child: Text(
               error ??
-                  '${_media.length} media · ${_documents.length} files '
-                      '(max ${_options.maxSelection})',
+                  strings.selectionSummary(
+                    _media.length,
+                    _documents.length,
+                    _options.maxSelection,
+                  ),
               style: theme.textTheme.bodySmall?.copyWith(
                 color: error == null ? null : theme.colorScheme.error,
               ),
@@ -371,7 +375,7 @@ class _BrowseFilesSheetState extends State<BrowseFilesSheet> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const SizedBox(),
-            label: Text('${_options.confirmLabel} ($_count)'),
+            label: Text(strings.confirmButton(strings.confirmLabel, _count)),
           ),
         ],
       ),

@@ -22,7 +22,7 @@ class OCBrowseFilesPage extends StatefulWidget {
   const OCBrowseFilesPage({
     this.options = const OCBrowseFilesOptions(),
     this.cache,
-    this.title = 'Attach',
+    this.title,
     super.key,
   });
 
@@ -32,8 +32,8 @@ class OCBrowseFilesPage extends StatefulWidget {
   /// The thumbnail cache to draw from; defaults to [OCThumbnailCache.shared].
   final OCThumbnailCache? cache;
 
-  /// The app bar's title.
-  final String title;
+  /// The app bar's title, or `null` for [OCBrowseFilesStrings.pageTitle].
+  final String? title;
 
   @override
   State<OCBrowseFilesPage> createState() => _OCBrowseFilesPageState();
@@ -124,14 +124,21 @@ class _OCBrowseFilesPageState extends State<OCBrowseFilesPage>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final strings = _options.text;
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.title),
+        title: Text(widget.title ?? strings.pageTitle),
         bottom: TabBar(
           controller: _tabs,
-          tabs: const [
-            Tab(icon: Icon(Icons.perm_media_outlined), text: 'Photos & videos'),
-            Tab(icon: Icon(Icons.folder_outlined), text: 'Files'),
+          tabs: [
+            Tab(
+              icon: const Icon(Icons.perm_media_outlined),
+              text: strings.mediaTabLabel,
+            ),
+            Tab(
+              icon: const Icon(Icons.folder_outlined),
+              text: strings.documentTabLabel,
+            ),
           ],
         ),
       ),
@@ -161,6 +168,7 @@ class _OCBrowseFilesPageState extends State<OCBrowseFilesPage>
 
   Widget _confirmBar(ThemeData theme) {
     final error = _error;
+    final strings = _options.text;
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
@@ -169,8 +177,11 @@ class _OCBrowseFilesPageState extends State<OCBrowseFilesPage>
             Expanded(
               child: Text(
                 error ??
-                    '${_media.length} media · ${_documents.length} files '
-                        '(max ${_options.maxSelection})',
+                    strings.selectionSummary(
+                      _media.length,
+                      _documents.length,
+                      _options.maxSelection,
+                    ),
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: error == null ? null : theme.colorScheme.error,
                 ),
@@ -185,7 +196,7 @@ class _OCBrowseFilesPageState extends State<OCBrowseFilesPage>
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.check, size: 18),
-              label: Text('${_options.confirmLabel} ($_count)'),
+              label: Text(strings.confirmButton(strings.confirmLabel, _count)),
             ),
           ],
         ),

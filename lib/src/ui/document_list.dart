@@ -184,6 +184,7 @@ class _OCDocumentListState extends State<OCDocumentList> {
         final order = widget.selection.indexOf(item);
         return _DocumentRow(
           item: item,
+          unknownType: widget.options.text.unknownFileType,
           order: order < 0 ? null : order + 1,
           enabled: widget.canSelectMore || order >= 0,
           onTap: () => widget.onToggle(item),
@@ -197,6 +198,7 @@ class _OCDocumentListState extends State<OCDocumentList> {
   Widget _header(BuildContext context) {
     final theme = Theme.of(context);
     final error = _error;
+    final strings = widget.options.text;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -207,8 +209,8 @@ class _OCDocumentListState extends State<OCDocumentList> {
             foregroundColor: theme.colorScheme.onPrimaryContainer,
             child: const Icon(Icons.smartphone_outlined),
           ),
-          title: const Text('Internal Storage'),
-          subtitle: const Text('Browse your file system'),
+          title: Text(strings.storagePickerTitle),
+          subtitle: Text(strings.storagePickerSubtitle),
           trailing: _picking
               ? const SizedBox(
                   width: 20,
@@ -224,12 +226,10 @@ class _OCDocumentListState extends State<OCDocumentList> {
             crossAxisAlignment: CrossAxisAlignment.start,
             spacing: 8,
             children: [
-              Text('Recent files', style: theme.textTheme.titleSmall),
+              Text(strings.recentFilesTitle, style: theme.textTheme.titleSmall),
               if (!_enumerable)
                 Text(
-                  'The system keeps the rest of your storage behind its own '
-                  'picker: Android 11 scoped it and iOS never opened it. Tap '
-                  'Internal Storage to reach anything that is not listed here.',
+                  strings.recentFilesOnlyDetail,
                   style: theme.textTheme.bodySmall,
                 ),
               if (error != null)
@@ -244,7 +244,7 @@ class _OCDocumentListState extends State<OCDocumentList> {
                   padding: const EdgeInsets.symmetric(vertical: 24),
                   child: Center(
                     child: Text(
-                      'No recent files — open Internal Storage to pick one.',
+                      strings.noRecentFiles,
                       style: theme.textTheme.bodySmall,
                     ),
                   ),
@@ -261,12 +261,16 @@ class _OCDocumentListState extends State<OCDocumentList> {
 class _DocumentRow extends StatelessWidget {
   const _DocumentRow({
     required this.item,
+    required this.unknownType,
     required this.order,
     required this.enabled,
     required this.onTap,
   });
 
   final OCDocumentItem item;
+
+  /// What a file with neither size nor date is called.
+  final String unknownType;
   final int? order;
   final bool enabled;
   final VoidCallback onTap;
@@ -301,16 +305,16 @@ class _DocumentRow extends StatelessWidget {
               ),
       ),
       title: Text(item.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-      subtitle: Text(_subtitle(item)),
+      subtitle: Text(_subtitle(item, unknownType)),
     );
   }
 
-  static String _subtitle(OCDocumentItem item) {
+  static String _subtitle(OCDocumentItem item, String unknownType) {
     final parts = <String>[
       if (item.sizeBytes != null) formatFileSize(item.sizeBytes!),
       if (item.modifiedAt != null) formatFileDate(item.modifiedAt!),
     ];
-    return parts.isEmpty ? (item.mimeType ?? 'file') : parts.join(' · ');
+    return parts.isEmpty ? (item.mimeType ?? unknownType) : parts.join(' · ');
   }
 }
 

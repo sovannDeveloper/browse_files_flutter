@@ -12,8 +12,9 @@ class OCAttachmentTab {
     required this.id,
     required this.label,
     required this.icon,
-  }) : builder = null,
-       badge = null;
+    this.builder,
+    this.badge,
+  });
 
   /// A tab whose body the host app builds — anything this package deliberately
   /// does not implement.
@@ -114,6 +115,29 @@ class OCAttachmentTab {
 
   /// Whether this package draws this tab's body.
   bool get isBuiltIn => builder == null;
+
+  /// The same tab under another caption.
+  ///
+  /// The row's captions live on the tabs rather than in
+  /// [OCBrowseFilesStrings], so this is how the built-in [gallery] and [file]
+  /// tabs get localised:
+  ///
+  /// ```dart
+  /// tabs: <OCAttachmentTab>[
+  ///   OCAttachmentTab.gallery.withLabel('Galerie'),
+  ///   OCAttachmentTab.file.withLabel('Fichier'),
+  /// ],
+  /// ```
+  ///
+  /// The [id] is untouched, so a relabelled built-in tab still gets its body
+  /// from this package.
+  OCAttachmentTab withLabel(String label) => OCAttachmentTab._(
+    id: id,
+    label: label,
+    icon: icon,
+    builder: builder,
+    badge: badge,
+  );
 
   @override
   bool operator ==(Object other) =>

@@ -1,4 +1,5 @@
 import 'package:browse_files_flutter/browse_files_flutter.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -143,6 +144,49 @@ void main() {
         OCBrowseFilesErrorCode.fromName('nope'),
         OCBrowseFilesErrorCode.unknown,
       );
+    });
+  });
+
+  group('BrowseFilesStrings', () {
+    test('leaves the strings it was not given alone', () {
+      const defaults = OCBrowseFilesStrings();
+      final translated = defaults.copyWith(confirmLabel: 'Envoyer');
+
+      expect(translated.confirmLabel, 'Envoyer');
+      expect(translated.retryLabel, defaults.retryLabel);
+      expect(translated.confirmButton('Envoyer', 3), 'Envoyer (3)');
+      expect(defaults.albumItemCount(1), '1 item');
+      expect(defaults.albumItemCount(12), '12 items');
+      expect(defaults.selectionSummary(2, 1, 10), '2 media · 1 files (max 10)');
+    });
+
+    test('options.confirmLabel overrides the one in the strings', () {
+      const options = OCBrowseFilesOptions(
+        confirmLabel: 'Send',
+        strings: OCBrowseFilesStrings(confirmLabel: 'Envoyer'),
+      );
+
+      expect(options.text.confirmLabel, 'Send');
+      expect(options.strings.confirmLabel, 'Envoyer', reason: 'left as given');
+      expect(const OCBrowseFilesOptions().text.confirmLabel, 'Select');
+    });
+  });
+
+  group('AttachmentTab', () {
+    test('a relabelled tab keeps its id, icon and body', () {
+      final renamed = OCAttachmentTab.gallery.withLabel('Galerie');
+
+      expect(renamed.label, 'Galerie');
+      expect(renamed.id, OCAttachmentTab.galleryId);
+      expect(renamed.icon, OCAttachmentTab.gallery.icon);
+      expect(renamed.isBuiltIn, isTrue, reason: 'still ours to draw');
+      expect(renamed, OCAttachmentTab.gallery, reason: 'identified by id');
+
+      final custom = OCAttachmentTab.poll(
+        builder: (context) => const SizedBox.shrink(),
+      ).withLabel('Sondage');
+      expect(custom.label, 'Sondage');
+      expect(custom.isBuiltIn, isFalse, reason: 'body still the host app\'s');
     });
   });
 }

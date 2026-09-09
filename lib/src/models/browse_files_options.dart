@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 import 'attachment_tab.dart';
+import 'browse_files_strings.dart';
 import 'media_type.dart';
 
 /// How the attachment sheet should behave when it opens.
@@ -17,7 +18,8 @@ class OCBrowseFilesOptions {
     this.pageSize = 50,
     this.thumbnailSize = 256,
     this.peekSize = 0.55,
-    this.confirmLabel = 'Select',
+    this.strings = const OCBrowseFilesStrings(),
+    this.confirmLabel,
     this.documentMimeTypes = const <String>[],
     this.allowMultipleDocuments = true,
     this.onCameraTap,
@@ -64,8 +66,21 @@ class OCBrowseFilesOptions {
   /// The fraction of the screen the sheet snaps to before being dragged up.
   final double peekSize;
 
+  /// Every string the sheet draws, for host apps that localise or reword it.
+  final OCBrowseFilesStrings strings;
+
   /// The label on the confirm button; the selection count is appended to it.
-  final String confirmLabel;
+  ///
+  /// A shortcut for the one string most apps change: when set it wins over
+  /// [OCBrowseFilesStrings.confirmLabel], and `null` leaves that one alone.
+  final String? confirmLabel;
+
+  /// The strings the sheet actually draws — [strings], with [confirmLabel]
+  /// folded in when the caller set it.
+  OCBrowseFilesStrings get text {
+    final label = confirmLabel;
+    return label == null ? strings : strings.copyWith(confirmLabel: label);
+  }
 
   /// MIME types the Files tab and its picker are restricted to; empty means
   /// any.
