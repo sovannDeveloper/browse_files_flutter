@@ -1,45 +1,48 @@
 /// A Telegram-style attachment bottom sheet for browsing device photos, videos
 /// and documents.
 ///
-/// Start with [OCBrowseFilesFlutter.instance]: check
-/// [OCBrowseFilesFlutter.permissionStatus], prompt with
-/// [OCBrowseFilesFlutter.requestPermission] — remembering that
-/// [OCMediaPermissionStatus.limited] is a *grant* — then page the library with
-/// [OCBrowseFilesFlutter.fetchMedia] and draw each tile from
-/// [OCBrowseFilesFlutter.loadThumbnail].
+/// Three ways in, all returning the same [OCBrowseFilesResult]:
 ///
-/// A library id is not a path: call [OCBrowseFilesFlutter.resolveFile] on the
-/// final selection to get a file the host app can read.
+/// * [OCBrowseFiles.showActions] — a short menu: take a photo, record a
+///   video, select photos & videos, select files.
+/// * [OCBrowseFiles.show] — the Telegram-style draggable sheet with a camera
+///   tile, the picked-media grid and the Gallery/File tab row.
+/// * [OCBrowseFiles.showPage] — a full-screen browser split by kind.
 ///
-/// The sheet UI itself is not implemented yet — see `CLAUDE.md` for the
-/// intended design.
+/// Underneath sits [OCBrowseFilesFlutter.instance]: [pickMedia] (the system
+/// Photo Picker on Android 13+, GET_CONTENT below that, PHPicker on iOS),
+/// [captureMedia] (the system camera), [pickDocuments] (SAF / the document
+/// picker) and [loadThumbnail]/[resolveFile]. None of them needs a media
+/// permission, so the plugin ships with **no** `READ_MEDIA_*` or
+/// `READ_EXTERNAL_STORAGE` declaration, which is what Google Play now requires
+/// to avoid the Permissions Declaration Form.
+///
+/// The id of every item [pickMedia] returns is a content URI on Android or a
+/// cached file path on iOS. Treat it as opaque: pass it to
+/// [OCBrowseFilesFlutter.loadThumbnail] for a grid tile and to
+/// [OCBrowseFilesFlutter.resolveFile] when the host app needs bytes on disk.
 library;
 
-import 'package:flutter/foundation.dart';
+import 'dart:typed_data';
 
 import 'src/browse_files_flutter_platform_interface.dart';
-import 'src/models/document_page.dart';
-import 'src/models/media_album.dart';
-import 'src/models/media_page.dart';
-import 'src/models/media_permission.dart';
+import 'src/models/media_item.dart';
 import 'src/models/media_type.dart';
 
 export 'src/browse_files_flutter_method_channel.dart';
 export 'src/browse_files_flutter_platform_interface.dart';
 export 'src/models/attachment_tab.dart';
+export 'src/models/browse_files_action.dart';
 export 'src/models/browse_files_exception.dart';
 export 'src/models/browse_files_options.dart';
 export 'src/models/browse_files_result.dart';
 export 'src/models/browse_files_strings.dart';
 export 'src/models/document_item.dart';
-export 'src/models/document_page.dart';
-export 'src/models/media_album.dart';
 export 'src/models/media_item.dart';
-export 'src/models/media_page.dart';
-export 'src/models/media_permission.dart';
 export 'src/models/media_type.dart';
 export 'src/ui/browse_files_page.dart' show OCBrowseFilesPage;
-export 'src/ui/browse_files_sheet.dart' show OCBrowseFiles, BrowseFilesSheet;
+export 'src/ui/browse_files_actions.dart' show OCBrowseFilesActionsSheet;
+export 'src/ui/browse_files_sheet.dart' show OCBrowseFiles;
 export 'src/ui/thumbnail_cache.dart';
 
 /// Entry point of the plugin.
@@ -55,46 +58,21 @@ class OCBrowseFilesFlutter {
   OCBrowseFilesFlutterPlatform get _platform =>
       OCBrowseFilesFlutterPlatform.instance;
 
-  /// The current access level, without prompting.
-  Future<OCMediaPermissionStatus> permissionStatus({
-    Set<OCMediaType> types = kAllMediaTypes,
-  }) => _platform.permissionStatus(types: types);
-
-  /// Prompts for library access and reports what the user granted.
+  /// Opens the system media picker and returns what the user chose.
   ///
-  /// Treat [OCMediaPermissionStatus.limited] as success: the user shared part of
-  /// their library rather than refusing.
-  Future<OCMediaPermissionStatus> requestPermission({
+  /// On Android 13+ this is the Photo Picker (`ACTION_PICK_IMAGES`), below
+  /// that the legacy `ACTION_GET_CONTENT` — neither requires a permission.
+  /// On iOS the PHPickerViewController is used. Resolves to an empty list
+  /// when the user dismissed the picker.
+  ///
+  /// The id of every returned [OCMediaItem] is a content URI on Android or an
+  /// asset identifier on iOS. It is **not** a file path: pass it to
+  /// [loadThumbnail] for a grid tile and to [resolveFile] when the host app
+  /// needs bytes on disk.
+  Future<List<OCMediaItem>> pickMedia({
     Set<OCMediaType> types = kAllMediaTypes,
-  }) => _platform.requestPermission(types: types);
-
-  /// Opens this app's page in system settings, for when prompting is no longer
-  /// possible.
-  Future<bool> openSettings() => _platform.openSettings();
-
-  /// Shows the OS picker that widens a [OCMediaPermissionStatus.limited] grant.
-  Future<OCMediaPermissionStatus> presentLimitedPicker() =>
-      _platform.presentLimitedPicker();
-
-  /// The albums holding at least one asset of the given [types], the synthetic
-  /// "all media" album first.
-  Future<List<OCMediaAlbum>> fetchAlbums({
-    Set<OCMediaType> types = kAllMediaTypes,
-  }) => _platform.fetchAlbums(types: types);
-
-  /// One page of an album, newest first; a `null` [albumId] means the whole
-  /// library.
-  Future<OCMediaPage> fetchMedia({
-    String? albumId,
-    Set<OCMediaType> types = kAllMediaTypes,
-    int offset = 0,
-    int limit = 50,
-  }) => _platform.fetchMedia(
-    albumId: albumId,
-    types: types,
-    offset: offset,
-    limit: limit,
-  );
+    bool allowMultiple = true,
+  }) => _platform.pickMedia(types: types, allowMultiple: allowMultiple);
 
   /// A JPEG thumbnail for one asset, or `null` if none could be produced.
   ///
@@ -114,18 +92,6 @@ class OCBrowseFilesFlutter {
   /// Copies an asset into the app cache and returns its path.
   Future<String> resolveFile(String id) => _platform.resolveFile(id);
 
-  /// One page of the files this platform will list — never the whole device;
-  /// see [OCDocumentPage.enumerable].
-  Future<OCDocumentPage> fetchDocuments({
-    List<String> mimeTypes = const [],
-    int offset = 0,
-    int limit = 50,
-  }) => _platform.fetchDocuments(
-    mimeTypes: mimeTypes,
-    offset: offset,
-    limit: limit,
-  );
-
   /// Opens the system document picker and returns cached paths for the chosen
   /// files, empty if the user dismissed it.
   Future<List<String>> pickDocuments({
@@ -135,4 +101,13 @@ class OCBrowseFilesFlutter {
     mimeTypes: mimeTypes,
     allowMultiple: allowMultiple,
   );
+
+  /// Opens the system camera to take a photo or record a video.
+  ///
+  /// Resolves to the capture, already copied into the app cache, or `null` if
+  /// the user backed out. No library permission is involved; iOS needs
+  /// `NSCameraUsageDescription` (and `NSMicrophoneUsageDescription` for
+  /// video) in the host's Info.plist.
+  Future<OCMediaItem?> captureMedia({OCMediaType type = OCMediaType.image}) =>
+      _platform.captureMedia(type: type);
 }

@@ -20,203 +20,170 @@ void main() {
     OCBrowseFilesFlutterPlatform.instance = OCMethodChannelBrowseFilesFlutter();
   });
 
-  testWidgets('shows a grid of the library, newest first', (tester) async {
-    platform.total = 12;
-
-    final harness = await _open(tester);
-
-    expect(find.byType(OCMediaTile), findsWidgets);
-    expect(platform.fetchedPages, isNotEmpty);
-    expect(platform.fetchedPages.first.limit, 50);
-    expect(harness.result, isNull, reason: 'nothing confirmed yet');
-  });
-
-  testWidgets('the gallery bar switches the grid to another album', (
+  testWidgets('starts on the empty-state CTA, then a pick fills the grid', (
     tester,
   ) async {
-    platform
-      ..total = 12
-      ..albums = <OCMediaAlbum>[
-        const OCMediaAlbum(
-          id: 'all',
-          name: 'All media',
-          count: 12,
-          isAll: true,
-        ),
-        const OCMediaAlbum(id: 'camera', name: 'Camera', count: 4),
-      ];
+    platform.picked = <OCMediaItem>[
+      _item(id: 'a', type: OCMediaType.image),
+      _item(id: 'b', type: OCMediaType.image),
+    ];
 
     await _open(tester);
 
-    expect(find.text('All media'), findsOneWidget);
-    expect(find.text('12 items'), findsOneWidget);
-    expect(platform.fetchedAlbumIds, [null]);
+    // The empty state is the Gallery tab's first face — a single CTA tile.
+    expect(find.text(platform.strings.galleryEmptyActionLabel), findsOneWidget);
+    expect(find.byType(OCMediaTile), findsNothing);
 
-    await tester.tap(find.text('All media'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Camera').last);
+    await tester.tap(find.text(platform.strings.galleryEmptyActionLabel));
     await tester.pumpAndSettle();
 
-    expect(platform.fetchedAlbumIds.last, 'camera');
-    expect(find.text('Camera'), findsOneWidget);
-    expect(find.text('4 items'), findsOneWidget);
+    expect(platform.picks, 1, reason: 'one tap opens the system picker');
+    expect(find.byType(OCMediaTile), findsNWidgets(2));
+    expect(find.text('Select (2)'), findsOneWidget);
   });
 
-  testWidgets('one album leaves the gallery bar off', (tester) async {
-    platform.total = 6;
-
-    await _open(tester);
-
-    expect(find.text('All media'), findsNothing);
-  });
-
-  testWidgets('pages the library in as the grid is scrolled', (tester) async {
-    platform.total = 130;
-
-    await _open(tester);
-
-    expect(platform.fetchedPages, [(offset: 0, limit: 50)]);
-    await _scrollToEnd(tester);
-
-    // Fifty at a time, each page asked for once and in order.
-    expect(platform.fetchedPages, [
-      (offset: 0, limit: 50),
-      (offset: 50, limit: 50),
-      (offset: 100, limit: 50),
-    ]);
-    expect(find.byType(OCMediaTile), findsWidgets);
-  });
-
-  testWidgets('a library that shifts while it is paged lists no asset twice', (
+  testWidgets('a dismissed picker leaves the empty state alone', (
     tester,
   ) async {
-    platform
-      ..total = 130
-      ..overlap = 5;
-
-    await _open(tester);
-    // Duplicate ids would throw on the grid's keys before this returned.
-    await _scrollToEnd(tester);
-
-    final ids = tester
-        .widgetList<OCMediaTile>(find.byType(OCMediaTile))
-        .map((tile) => tile.item.id)
-        .toList();
-    expect(ids.toSet().length, ids.length, reason: 'one tile per asset');
-  });
-
-  testWidgets('tapping tiles selects them in order and confirms', (
-    tester,
-  ) async {
-    platform.total = 6;
+    platform.picked = const <OCMediaItem>[];
 
     final harness = await _open(tester);
+    await tester.tap(find.text(platform.strings.galleryEmptyActionLabel));
+    await tester.pumpAndSettle();
+
+    expect(platform.picks, 1);
+    expect(find.byType(OCMediaTile), findsNothing);
+    expect(harness.result, isNull);
+    // Still on the empty CTA, not stuck on a spinner.
+    expect(find.text(platform.strings.galleryEmptyActionLabel), findsOneWidget);
+  });
+
+  testWidgets('Select more reopens the picker and appends', (tester) async {
+    platform.picked = <OCMediaItem>[_item(id: 'a', type: OCMediaType.image)];
+    platform.pickerOutcome = (_) => <OCMediaItem>[
+      _item(id: 'b', type: OCMediaType.image),
+    ];
+
+    await _open(tester);
+    await tester.tap(find.text(platform.strings.galleryEmptyActionLabel));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(OCMediaTile), findsOneWidget);
+    expect(platform.picks, 1);
+
+    await tester.tap(find.text(platform.strings.gallerySelectMoreLabel));
+    await tester.pumpAndSettle();
+
+    expect(platform.picks, 2);
+    // The new pick is appended and re-tapping the second item removes it.
+    expect(find.byType(OCMediaTile), findsNWidgets(2));
+    expect(find.text('Select (2)'), findsOneWidget);
+  });
+
+  testWidgets('tapping a selected tile deselects it', (tester) async {
+    platform.picked = <OCMediaItem>[
+      _item(id: 'a', type: OCMediaType.image),
+      _item(id: 'b', type: OCMediaType.image),
+    ];
+
+    await _open(tester);
+    await tester.tap(find.text(platform.strings.galleryEmptyActionLabel));
+    await tester.pumpAndSettle();
+    expect(find.text('Select (2)'), findsOneWidget);
+
     await tester.tap(find.byType(OCMediaTile).first);
     await tester.pumpAndSettle();
+    expect(find.text('Select (1)'), findsOneWidget);
+  });
 
-    // The first pick is numbered 1 and the confirm bar counts it.
-    expect(find.text('1'), findsOneWidget);
-    expect(find.text('Send (1)'), findsOneWidget);
+  testWidgets('selection stops at maxSelection', (tester) async {
+    platform.picked = <OCMediaItem>[
+      for (var i = 0; i < 5; i++)
+        _item(id: 'asset-$i', type: OCMediaType.image),
+    ];
 
-    await tester.tap(find.byType(OCMediaTile).at(1));
+    await _open(tester, options: const OCBrowseFilesOptions(maxSelection: 2));
+    await tester.tap(find.text(platform.strings.galleryEmptyActionLabel));
     await tester.pumpAndSettle();
-    expect(find.text('2'), findsOneWidget);
-    expect(find.text('Send (2)'), findsOneWidget);
 
-    await tester.tap(find.text('Send (2)'));
+    expect(find.text('Select (2)'), findsOneWidget);
+    // The third tile is dimmed and tapping it doesn't add another pick.
+    await tester.tap(find.byType(OCMediaTile).at(2));
+    await tester.pumpAndSettle();
+    expect(find.text('Select (2)'), findsOneWidget);
+  });
+
+  testWidgets('a single cap forces the picker into single-pick mode', (
+    tester,
+  ) async {
+    await _open(tester, options: const OCBrowseFilesOptions(maxSelection: 1));
+    await tester.tap(find.text(platform.strings.galleryEmptyActionLabel));
+    await tester.pumpAndSettle();
+
+    // The grid never called for more than one item.
+    expect(platform.lastAllowMultiple, isFalse);
+  });
+
+  testWidgets('confirming pops the result with the picked media', (
+    tester,
+  ) async {
+    platform.picked = <OCMediaItem>[
+      _item(id: 'a', type: OCMediaType.image),
+      _item(id: 'b', type: OCMediaType.image),
+    ];
+
+    final harness = await _open(tester);
+    await tester.tap(find.text(platform.strings.galleryEmptyActionLabel));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Select (2)'));
     await tester.pumpAndSettle();
 
     final result = harness.result;
     expect(result, isNotNull);
-    expect(result!.media, hasLength(2));
-    expect(result.media.first.id, 'asset-0');
-    expect(result.media.last.id, 'asset-1');
+    expect(result!.media.map((i) => i.id), ['a', 'b']);
     expect(result.documents, isEmpty);
   });
 
-  testWidgets('a second tap deselects', (tester) async {
-    platform.total = 4;
-
-    await _open(tester);
-    await tester.tap(find.byType(OCMediaTile).first);
-    await tester.pumpAndSettle();
-    expect(find.text('Send (1)'), findsOneWidget);
-
-    await tester.tap(find.byType(OCMediaTile).first);
-    await tester.pumpAndSettle();
-    expect(find.textContaining('Send ('), findsNothing);
-  });
-
-  testWidgets('selection stops at maxSelection', (tester) async {
-    platform.total = 9;
-
-    await _open(tester, options: const OCBrowseFilesOptions(maxSelection: 2));
-    for (var i = 0; i < 3; i++) {
-      await tester.tap(find.byType(OCMediaTile).at(i));
-      await tester.pumpAndSettle();
-    }
-
-    expect(find.text('Send (2)'), findsOneWidget);
-    expect(find.text('2 of 2 selected'), findsOneWidget);
-    expect(find.text('3'), findsNothing);
-  });
-
   testWidgets('videos carry a duration badge', (tester) async {
-    platform
-      ..total = 3
-      ..videoDuration = const Duration(hours: 1, minutes: 32, seconds: 48);
+    platform.picked = <OCMediaItem>[
+      _item(
+        id: 'v',
+        type: OCMediaType.video,
+        duration: const Duration(hours: 1, minutes: 32, seconds: 48),
+      ),
+    ];
 
     await _open(tester);
+    await tester.tap(find.text(platform.strings.galleryEmptyActionLabel));
+    await tester.pumpAndSettle();
 
-    // asset-1 is the video: every third item in the fake library.
     expect(find.text('1:32:48'), findsOneWidget);
   });
 
-  testWidgets('asks for access when the library is off limits', (tester) async {
-    platform
-      ..status = OCMediaPermissionStatus.denied
-      ..total = 5;
-
-    await _open(tester);
-    expect(find.text('Let this app see your photos'), findsOneWidget);
-    expect(platform.fetchedPages, isEmpty, reason: 'no paging before a grant');
-
-    platform.grantOnRequest = OCMediaPermissionStatus.granted;
-    await tester.tap(find.text('Allow access'));
-    await tester.pumpAndSettle();
-
-    expect(platform.requests, 1);
-    expect(find.byType(OCMediaTile), findsWidgets);
-  });
-
-  testWidgets('permanently denied points at Settings instead of prompting', (
+  testWidgets('a picker error paints the empty state with a Retry button', (
     tester,
   ) async {
-    platform.status = OCMediaPermissionStatus.permanentlyDenied;
+    var calls = 0;
+    platform.pickerOutcome = (i) {
+      calls++;
+      if (calls == 1) {
+        throw OCBrowseFilesException(
+          OCBrowseFilesErrorCode.notFound,
+          'the picker could not be opened',
+        );
+      }
+      return <OCMediaItem>[_item(id: 'a', type: OCMediaType.image)];
+    };
 
     await _open(tester);
-    await tester.tap(find.text('Open settings'));
+    await tester.tap(find.text(platform.strings.galleryEmptyActionLabel));
     await tester.pumpAndSettle();
+    expect(find.text(platform.strings.retryLabel), findsOneWidget);
 
-    expect(platform.settingsOpened, 1);
-    expect(platform.requests, 0);
-  });
-
-  testWidgets('a limited grant still browses, and offers to widen', (
-    tester,
-  ) async {
-    platform
-      ..status = OCMediaPermissionStatus.limited
-      ..total = 4;
-
-    await _open(tester);
-    expect(find.byType(OCMediaTile), findsWidgets);
-    expect(find.text('You shared some of your library'), findsOneWidget);
-
-    await tester.tap(find.text('Select more'));
+    await tester.tap(find.text(platform.strings.retryLabel));
     await tester.pumpAndSettle();
-
-    expect(platform.limitedPickerShown, 1);
+    expect(find.byType(OCMediaTile), findsOneWidget);
   });
 
   testWidgets('the File tab hands back cached document paths', (tester) async {
@@ -226,8 +193,14 @@ void main() {
     await tester.tap(find.text('File'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Browse files'), findsOneWidget);
-    await tester.tap(find.text('Browse files'));
+    expect(find.text('Internal Storage'), findsOneWidget);
+    await tester.tap(find.text('Internal Storage'));
+    await tester.pumpAndSettle();
+    // Picking the documents puts them in the sheet's selection, but the sheet
+    // only pops when the user confirms — Telegram's pattern.
+    expect(find.text('Select (2)'), findsOneWidget);
+
+    await tester.tap(find.text('Select (2)'));
     await tester.pumpAndSettle();
 
     expect(harness.result?.documents, platform.documents);
@@ -242,11 +215,12 @@ void main() {
     final harness = await _open(tester);
     await tester.tap(find.text('File'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Browse files'));
+    await tester.tap(find.text('Internal Storage'));
     await tester.pumpAndSettle();
 
     expect(harness.result, isNull);
-    expect(find.text('Browse files'), findsOneWidget);
+    // Sheet is still open, ready for the user to try again.
+    expect(find.text('Internal Storage'), findsOneWidget);
   });
 
   testWidgets('custom tabs are built by the host app', (tester) async {
@@ -270,111 +244,260 @@ void main() {
   });
 
   testWidgets('thumbnails are cached per asset and size', (tester) async {
-    platform.total = 6;
+    platform.picked = <OCMediaItem>[
+      _item(id: 'a', type: OCMediaType.image),
+      _item(id: 'b', type: OCMediaType.image),
+    ];
     final cache = OCThumbnailCache(capacity: 4);
 
     await _open(tester, cache: cache);
-    final firstPass = platform.thumbnailRequests.length;
-    expect(firstPass, greaterThan(0));
-
-    // Rebuilding must not re-ask for what the cache already holds.
-    await tester.tap(find.byType(OCMediaTile).first);
+    await tester.tap(find.text(platform.strings.galleryEmptyActionLabel));
     await tester.pumpAndSettle();
-    expect(platform.thumbnailRequests.length, firstPass);
+    expect(platform.thumbnailRequests.length, greaterThan(0));
     expect(cache.length, lessThanOrEqualTo(4));
-  });
 
-  testWidgets('a page asks for its thumbnails before the tiles are built', (
-    tester,
-  ) async {
-    platform.total = 130;
-
-    await _open(tester);
-
-    // The last asset of the first page is nowhere near the viewport, so only a
-    // prefetch can have asked for it — and nothing beyond that page has been
-    // asked for at all.
-    expect(platform.thumbnailRequests, contains(startsWith('asset-49@')));
-    expect(
-      platform.thumbnailRequests,
-      isNot(contains(startsWith('asset-50@'))),
-    );
-  });
-
-  testWidgets('the grid re-reads the library after a trip to the camera', (
-    tester,
-  ) async {
-    platform.total = 3;
-
-    await _open(tester);
-    final beforeResume = platform.fetchedPages.length;
-
-    // A photo taken in another app while the sheet was backgrounded.
-    platform.total = 4;
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-    await tester.pumpAndSettle();
-
-    expect(platform.fetchedPages.length, beforeResume + 1);
-    expect(platform.fetchedPages.last.offset, 0);
-    expect(find.byType(OCMediaTile), findsNWidgets(4));
-  });
-
-  testWidgets('an unchanged library survives a resume untouched', (
-    tester,
-  ) async {
-    platform.total = 3;
-
-    await _open(tester);
+    // Tapping a tile rebuilds the grid; the cache means the prefetch is not
+    // re-asked for what is already there.
+    final firstPass = platform.thumbnailRequests.length;
     await tester.tap(find.byType(OCMediaTile).first);
-    await tester.pumpAndSettle();
-
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-    await tester.pumpAndSettle();
-
-    // Nothing new, so the selection and the grid stay exactly as they were.
-    expect(find.text('Send (1)'), findsOneWidget);
-    expect(find.text('1'), findsOneWidget);
+    // Pump just enough frames for the AnimatedScale / selection dot to settle,
+    // rather than pumpAndSettle which loops while the picker spinner animates.
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(platform.thumbnailRequests.length, firstPass);
   });
 
-  testWidgets('the camera cell leads the grid, two rows tall', (tester) async {
-    platform.total = 8;
+  testWidgets('the camera tile leads the grid when a handler is set', (
+    tester,
+  ) async {
+    platform.picked = <OCMediaItem>[
+      for (var i = 0; i < 8; i++)
+        _item(id: 'asset-$i', type: OCMediaType.image),
+    ];
     var cameraTaps = 0;
 
     await _open(
       tester,
       options: OCBrowseFilesOptions(onCameraTap: () => cameraTaps++),
     );
+    await tester.tap(find.text(platform.strings.galleryEmptyActionLabel));
+    await tester.pumpAndSettle();
 
-    final camera = find.ancestor(
-      of: find.byIcon(Icons.photo_camera_outlined),
-      matching: find.byType(GestureDetector),
-    );
-    final cameraSize = tester.getSize(camera.first);
     final tileSize = tester.getSize(find.byType(OCMediaTile).first);
+    final cameraSize = tester.getSize(
+      find
+          .ancestor(
+            of: find.byIcon(Icons.photo_camera_outlined),
+            matching: find.byType(GestureDetector),
+          )
+          .first,
+    );
 
+    // The camera tile is two rows tall — Telegram's design.
     expect(cameraSize.width, closeTo(tileSize.width, 0.5));
-    // Two rows of tiles plus the gap between them.
     expect(cameraSize.height, closeTo(tileSize.height * 2 + 2, 0.5));
-    // It sits at the top-left, with the first asset beside it, not under it.
+    // It sits to the left of the first asset, not below it.
     expect(
-      tester.getTopLeft(camera.first).dx,
+      tester
+          .getTopLeft(
+            find
+                .ancestor(
+                  of: find.byIcon(Icons.photo_camera_outlined),
+                  matching: find.byType(GestureDetector),
+                )
+                .first,
+          )
+          .dx,
       lessThan(tester.getTopLeft(find.byType(OCMediaTile).first).dx),
     );
 
-    await tester.tap(camera.first);
+    await tester.tap(find.byIcon(Icons.photo_camera_outlined).first);
     await tester.pumpAndSettle();
     expect(cameraTaps, 1);
   });
 
-  testWidgets('no camera tile without a handler', (tester) async {
-    platform.total = 4;
+  testWidgets('no camera tile when showCamera is off', (tester) async {
+    platform.picked = <OCMediaItem>[_item(id: 'a', type: OCMediaType.image)];
 
-    await _open(tester);
+    await _open(tester, options: const OCBrowseFilesOptions(showCamera: false));
+    expect(find.byIcon(Icons.photo_camera_outlined), findsNothing);
 
+    await tester.tap(find.text(platform.strings.galleryEmptyActionLabel));
+    await tester.pumpAndSettle();
     expect(find.byIcon(Icons.photo_camera_outlined), findsNothing);
   });
 
-  testWidgets('the tab row carries Telegram\'s full set when asked', (
+  testWidgets('the built-in camera shoots straight into the selection', (
+    tester,
+  ) async {
+    platform.captured = _item(id: '/cache/shot.jpg', type: OCMediaType.image);
+
+    // Photos only: no photo/video choice, the camera opens on the tap.
+    await _open(
+      tester,
+      options: const OCBrowseFilesOptions(types: {OCMediaType.image}),
+    );
+    expect(find.byIcon(Icons.photo_camera_outlined), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.photo_camera_outlined));
+    await tester.pumpAndSettle();
+
+    expect(platform.captures, <OCMediaType>[OCMediaType.image]);
+    expect(find.byType(OCMediaTile), findsOneWidget);
+    expect(find.text('Select (1)'), findsOneWidget);
+    // The camera cell now leads the grid for the next shot.
+    expect(find.byIcon(Icons.photo_camera_outlined), findsWidgets);
+  });
+
+  testWidgets('with both kinds allowed the camera asks photo or video first', (
+    tester,
+  ) async {
+    platform.captured = _item(
+      id: '/cache/clip.mp4',
+      type: OCMediaType.video,
+      duration: const Duration(seconds: 12),
+    );
+
+    await _open(tester);
+    await tester.tap(find.byIcon(Icons.photo_camera_outlined));
+    await tester.pumpAndSettle();
+
+    expect(platform.captures, isEmpty, reason: 'the choice comes first');
+    expect(find.text(platform.strings.takePhotoLabel), findsOneWidget);
+    expect(find.text(platform.strings.recordVideoLabel), findsOneWidget);
+
+    await tester.tap(find.text(platform.strings.recordVideoLabel));
+    await tester.pumpAndSettle();
+
+    expect(platform.captures, <OCMediaType>[OCMediaType.video]);
+    expect(find.byType(OCMediaTile), findsOneWidget);
+    expect(find.text('0:12'), findsOneWidget);
+  });
+
+  testWidgets('a camera the user backed out of changes nothing', (
+    tester,
+  ) async {
+    platform.captured = null;
+
+    await _open(
+      tester,
+      options: const OCBrowseFilesOptions(types: {OCMediaType.image}),
+    );
+    await tester.tap(find.byIcon(Icons.photo_camera_outlined));
+    await tester.pumpAndSettle();
+
+    expect(platform.captures, hasLength(1));
+    expect(find.byType(OCMediaTile), findsNothing);
+    expect(find.text(platform.strings.galleryEmptyActionLabel), findsOneWidget);
+  });
+
+  testWidgets('onCameraTap still overrides the built-in camera', (
+    tester,
+  ) async {
+    var cameraTaps = 0;
+
+    await _open(
+      tester,
+      options: OCBrowseFilesOptions(onCameraTap: () => cameraTaps++),
+    );
+    await tester.tap(find.byIcon(Icons.photo_camera_outlined));
+    await tester.pumpAndSettle();
+
+    expect(cameraTaps, 1);
+    expect(platform.captures, isEmpty);
+  });
+
+  group('showActions', () {
+    testWidgets('lists the four rows and runs the one tapped', (tester) async {
+      platform.picked = <OCMediaItem>[
+        _item(id: 'a', type: OCMediaType.image),
+        _item(id: 'b', type: OCMediaType.video),
+      ];
+
+      final harness = await _openActions(tester);
+      for (final label in <String>[
+        platform.strings.takePhotoLabel,
+        platform.strings.recordVideoLabel,
+        platform.strings.selectMediaLabel,
+        platform.strings.selectFilesLabel,
+      ]) {
+        expect(find.text(label), findsOneWidget);
+      }
+
+      await tester.tap(find.text(platform.strings.selectMediaLabel));
+      await tester.pumpAndSettle();
+
+      // The menu is gone by the time the picker answers.
+      expect(find.text(platform.strings.selectMediaLabel), findsNothing);
+      expect(platform.picks, 1);
+      expect(harness.result?.media.map((item) => item.id), ['a', 'b']);
+    });
+
+    testWidgets('the camera rows capture one item', (tester) async {
+      platform.captured = _item(id: '/cache/shot.jpg', type: OCMediaType.image);
+
+      final harness = await _openActions(tester);
+      await tester.tap(find.text(platform.strings.takePhotoLabel));
+      await tester.pumpAndSettle();
+
+      expect(platform.captures, <OCMediaType>[OCMediaType.image]);
+      expect(harness.result?.media.single.id, '/cache/shot.jpg');
+    });
+
+    testWidgets('the files row returns cached paths', (tester) async {
+      platform.documents = const <String>['/cache/a.pdf'];
+
+      final harness = await _openActions(tester);
+      await tester.tap(find.text(platform.strings.selectFilesLabel));
+      await tester.pumpAndSettle();
+
+      expect(harness.result?.documents, const <String>['/cache/a.pdf']);
+    });
+
+    testWidgets('backing out of the camera is empty, dismissing is null', (
+      tester,
+    ) async {
+      platform.captured = null;
+
+      var harness = await _openActions(tester);
+      await tester.tap(find.text(platform.strings.takePhotoLabel));
+      await tester.pumpAndSettle();
+      expect(harness.result, OCBrowseFilesResult.empty);
+
+      harness = await _openActions(tester);
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
+      expect(harness.result, isNull);
+    });
+
+    testWidgets('the camera rows follow the allowed types', (tester) async {
+      await _openActions(
+        tester,
+        options: const OCBrowseFilesOptions(types: {OCMediaType.video}),
+      );
+
+      expect(find.text(platform.strings.takePhotoLabel), findsNothing);
+      expect(find.text(platform.strings.recordVideoLabel), findsOneWidget);
+    });
+
+    testWidgets('the gallery row respects maxSelection', (tester) async {
+      platform.picked = <OCMediaItem>[
+        for (var i = 0; i < 5; i++)
+          _item(id: 'asset-$i', type: OCMediaType.image),
+      ];
+
+      final harness = await _openActions(
+        tester,
+        options: const OCBrowseFilesOptions(maxSelection: 2),
+      );
+      await tester.tap(find.text(platform.strings.selectMediaLabel));
+      await tester.pumpAndSettle();
+
+      expect(platform.lastAllowMultiple, isTrue);
+      expect(harness.result?.media, hasLength(2));
+    });
+  });
+
+  testWidgets('the tab row carries the full Telegram set when asked', (
     tester,
   ) async {
     final options = OCBrowseFilesOptions(
@@ -413,7 +536,6 @@ void main() {
   testWidgets('a forced background recolours the sheet, not the app', (
     tester,
   ) async {
-    platform.total = 3;
     const black = Color(0xFF111112);
 
     await _open(
@@ -425,6 +547,9 @@ void main() {
     );
 
     // The theme in force where the sheet draws itself, whatever wraps it.
+    // Find the bar before any pick — once an item is chosen the bar gives way
+    // to the confirm row.
+    expect(find.byType(OCAttachmentTabBar), findsOneWidget);
     final sheet = Theme.of(tester.element(find.byType(OCAttachmentTabBar)));
     expect(sheet.colorScheme.surface, black);
     expect(sheet.colorScheme.primary, const Color(0xFF29B6A4));
@@ -438,44 +563,29 @@ void main() {
   testWidgets('custom strings replace the sheet\'s own wording', (
     tester,
   ) async {
-    platform
-      ..total = 12
-      ..albums = <OCMediaAlbum>[
-        const OCMediaAlbum(id: 'all', name: 'Tout', count: 12, isAll: true),
-        const OCMediaAlbum(id: 'camera', name: 'Appareil photo', count: 4),
-      ];
+    platform.picked = <OCMediaItem>[_item(id: 'a', type: OCMediaType.image)];
 
     await _open(
       tester,
       options: OCBrowseFilesOptions(
         strings: OCBrowseFilesStrings(
           confirmLabel: 'Envoyer',
-          albumItemCount: (count) => '$count éléments',
-          selectionSummary: (media, documents, max) =>
-              '$media sur $max sélectionnés',
+          galleryEmptyActionLabel: 'Choisir',
         ),
-        tabs: <OCAttachmentTab>[
-          OCAttachmentTab.gallery.withLabel('Galerie'),
-          OCAttachmentTab.file.withLabel('Fichier'),
-        ],
       ),
     );
 
-    expect(find.text('12 éléments'), findsOneWidget);
-    expect(find.text('Galerie'), findsOneWidget);
-    expect(find.text('Fichier'), findsOneWidget);
-
-    await tester.tap(find.byType(OCMediaTile).first);
+    expect(find.text('Choisir'), findsOneWidget);
+    await tester.tap(find.text('Choisir'));
     await tester.pumpAndSettle();
 
     expect(find.text('Envoyer (1)'), findsOneWidget);
-    expect(find.text('1 sur 10 sélectionnés'), findsOneWidget);
   });
 
   testWidgets('options.confirmLabel still wins over the strings', (
     tester,
   ) async {
-    platform.total = 3;
+    platform.picked = <OCMediaItem>[_item(id: 'a', type: OCMediaType.image)];
 
     await _open(
       tester,
@@ -484,8 +594,7 @@ void main() {
         strings: OCBrowseFilesStrings(confirmLabel: 'Envoyer'),
       ),
     );
-
-    await tester.tap(find.byType(OCMediaTile).first);
+    await tester.tap(find.text(platform.strings.galleryEmptyActionLabel));
     await tester.pumpAndSettle();
 
     expect(find.text('Send (1)'), findsOneWidget);
@@ -495,19 +604,18 @@ void main() {
 Widget _pollBody(BuildContext context) =>
     const Center(child: Text('a poll lives here'));
 
-/// Opens the sheet over a throwaway screen and keeps hold of what it returns.
-/// Drags the grid up until the library stops growing under it.
-///
-/// The sheet expands before it scrolls, so this is several drags rather than
-/// one big fling.
-Future<void> _scrollToEnd(WidgetTester tester) async {
-  for (var attempt = 0; attempt < 20; attempt++) {
-    // The grid itself, not a tile: a tile near the top of the list may already
-    // have scrolled out of the viewport, and the drag would miss it.
-    await tester.drag(find.byType(GridView), const Offset(0, -900));
-    await tester.pumpAndSettle();
-  }
-}
+OCMediaItem _item({
+  required String id,
+  required OCMediaType type,
+  Duration? duration,
+}) => OCMediaItem(
+  id: id,
+  type: type,
+  width: 1080,
+  height: 1920,
+  createdAt: DateTime(2026, 1, 1),
+  duration: duration,
+);
 
 Future<_Harness> _open(
   WidgetTester tester, {
@@ -515,6 +623,7 @@ Future<_Harness> _open(
   OCThumbnailCache? cache,
 }) async {
   final harness = _Harness();
+  _usePhoneViewport(tester);
   await tester.pumpWidget(
     MaterialApp(
       home: Scaffold(
@@ -538,87 +647,82 @@ Future<_Harness> _open(
   return harness;
 }
 
+Future<_Harness> _openActions(
+  WidgetTester tester, {
+  OCBrowseFilesOptions options = const OCBrowseFilesOptions(),
+}) async {
+  final harness = _Harness();
+  _usePhoneViewport(tester);
+  await tester.pumpWidget(
+    MaterialApp(
+      home: Scaffold(
+        body: Builder(
+          builder: (context) => TextButton(
+            onPressed: () async {
+              harness.result = await OCBrowseFiles.showActions(
+                context,
+                options: options,
+              );
+            },
+            child: const Text('open menu'),
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.tap(find.text('open menu'));
+  await tester.pumpAndSettle();
+  return harness;
+}
+
 class _Harness {
   OCBrowseFilesResult? result;
 }
 
-/// A platform that serves a synthetic library, so the sheet can be driven
-/// without a device.
+/// A phone-shaped window: the default 800x600 makes each of three columns
+/// ~265px tall, so a sheet at peek height shows barely one row.
+void _usePhoneViewport(WidgetTester tester) {
+  tester.view.physicalSize = const Size(400, 800);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
+}
+
+/// A platform that serves the items [picked] tells it to, so the sheet can
+/// be driven without a device.
 class _FakePlatform extends OCBrowseFilesFlutterPlatform {
-  OCMediaPermissionStatus status = OCMediaPermissionStatus.granted;
-  OCMediaPermissionStatus? grantOnRequest;
-  Duration videoDuration = const Duration(minutes: 2, seconds: 5);
-  int total = 0;
+  /// The library the picker returns.
+  List<OCMediaItem> picked = <OCMediaItem>[];
+
+  /// The documents the Files picker returns; defaults to none.
   List<String> documents = const <String>[];
 
-  /// How many rows each page after the first repeats from the one before it.
-  int overlap = 0;
+  /// Hook to override the pick result per call (mostly for error flows).
+  List<OCMediaItem> Function(int call) pickerOutcome = (i) => <OCMediaItem>[];
 
-  int requests = 0;
-  int settingsOpened = 0;
-  int limitedPickerShown = 0;
-  final List<({int offset, int limit})> fetchedPages =
-      <({int offset, int limit})>[];
+  OCBrowseFilesStrings get strings => const OCBrowseFilesStrings();
+
+  int picks = 0;
+  bool? lastAllowMultiple;
+  Set<OCMediaType>? lastTypes;
+
+  /// What the camera hands back; `null` is the user backing out.
+  OCMediaItem? captured;
+
+  /// The kinds the camera was opened for, in order.
+  final List<OCMediaType> captures = <OCMediaType>[];
+
   final List<String> thumbnailRequests = <String>[];
 
-  /// The albums the top bar offers; one entry keeps the bar hidden.
-  List<OCMediaAlbum>? albums;
-
-  /// Which album each page was asked for, `null` for the whole library.
-  final List<String?> fetchedAlbumIds = <String?>[];
-
   @override
-  Future<OCMediaPermissionStatus> permissionStatus({
+  Future<List<OCMediaItem>> pickMedia({
     Set<OCMediaType> types = kAllMediaTypes,
-  }) async => status;
-
-  @override
-  Future<OCMediaPermissionStatus> requestPermission({
-    Set<OCMediaType> types = kAllMediaTypes,
+    bool allowMultiple = true,
   }) async {
-    requests++;
-    return status = grantOnRequest ?? status;
-  }
-
-  @override
-  Future<bool> openSettings() async {
-    settingsOpened++;
-    return true;
-  }
-
-  @override
-  Future<OCMediaPermissionStatus> presentLimitedPicker() async {
-    limitedPickerShown++;
-    return status;
-  }
-
-  @override
-  Future<List<OCMediaAlbum>> fetchAlbums({
-    Set<OCMediaType> types = kAllMediaTypes,
-  }) async =>
-      albums ??
-      <OCMediaAlbum>[
-        OCMediaAlbum(id: 'all', name: 'All media', count: total, isAll: true),
-      ];
-
-  @override
-  Future<OCMediaPage> fetchMedia({
-    String? albumId,
-    Set<OCMediaType> types = kAllMediaTypes,
-    int offset = 0,
-    int limit = 50,
-  }) async {
-    fetchedPages.add((offset: offset, limit: limit));
-    fetchedAlbumIds.add(albumId);
-    // Assets added while the grid is being paged push everything down, so a
-    // later page hands back rows an earlier one already carried.
-    final start = offset == 0 ? 0 : (offset - overlap).clamp(0, total);
-    final end = (start + limit).clamp(0, total);
-    return OCMediaPage(
-      items: <OCMediaItem>[for (var i = start; i < end; i++) _itemAt(i)],
-      offset: offset,
-      total: total,
-    );
+    picks++;
+    lastAllowMultiple = allowMultiple;
+    lastTypes = types;
+    if (picks == 1 && picked.isNotEmpty) return picked;
+    return pickerOutcome(picks);
   }
 
   @override
@@ -643,15 +747,11 @@ class _FakePlatform extends OCBrowseFilesFlutterPlatform {
     bool allowMultiple = true,
   }) async => documents;
 
-  OCMediaItem _itemAt(int index) {
-    final isVideo = index == 1;
-    return OCMediaItem(
-      id: 'asset-$index',
-      type: isVideo ? OCMediaType.video : OCMediaType.image,
-      width: 1080,
-      height: 1920,
-      createdAt: DateTime(2026, 1, 1).subtract(Duration(minutes: index)),
-      duration: isVideo ? videoDuration : null,
-    );
+  @override
+  Future<OCMediaItem?> captureMedia({
+    OCMediaType type = OCMediaType.image,
+  }) async {
+    captures.add(type);
+    return captured;
   }
 }

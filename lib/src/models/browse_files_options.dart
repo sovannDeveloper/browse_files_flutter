@@ -15,28 +15,34 @@ class OCBrowseFilesOptions {
     this.tabs = OCAttachmentTab.defaults,
     this.initialTabId = OCAttachmentTab.galleryId,
     this.crossAxisCount = 3,
-    this.pageSize = 50,
     this.thumbnailSize = 256,
     this.peekSize = 0.55,
     this.strings = const OCBrowseFilesStrings(),
     this.confirmLabel,
     this.documentMimeTypes = const <String>[],
     this.allowMultipleDocuments = true,
+    this.allowMultipleMedia = true,
+    this.showCamera = true,
     this.onCameraTap,
     this.backgroundColor,
     this.accentColor,
   }) : assert(maxSelection >= 1, 'maxSelection must allow at least one item'),
        assert(crossAxisCount >= 1, 'the grid needs at least one column'),
-       assert(pageSize > 0, 'pageSize must be positive'),
        assert(
          peekSize > 0 && peekSize <= 1,
          'peekSize is a fraction of the screen',
        );
 
-  /// Which media the gallery grid shows.
+  /// Which media kinds the gallery picker shows.
+  ///
+  /// Passed straight to the system picker (Photo Picker on Android 13+,
+  /// `ACTION_GET_CONTENT` below that, PHPickerViewController on iOS) as the
+  /// MIME filter — only items of these kinds appear in the picker.
   final Set<OCMediaType> types;
 
   /// How many items may be selected before further taps are refused.
+  ///
+  /// Counts across both the gallery and the file tab.
   final int maxSelection;
 
   /// The bottom row of attachment kinds, left to right.
@@ -47,15 +53,8 @@ class OCBrowseFilesOptions {
   /// Which of [tabs] opens first, by [OCAttachmentTab.id].
   final String initialTabId;
 
-  /// Columns in the media grid. Telegram uses three.
+  /// Columns in the picked-media grid. Telegram uses three.
   final int crossAxisCount;
-
-  /// How many items each page of the grid asks the platform for.
-  ///
-  /// The grid asks for the next page a few rows before the last one is
-  /// reached, so this is the size of a scroll-ahead batch, not of the library:
-  /// a device holding twenty thousand photos is read fifty at a time.
-  final int pageSize;
 
   /// The pixel size thumbnails are requested at, square.
   ///
@@ -93,6 +92,12 @@ class OCBrowseFilesOptions {
   /// Whether the File tab lets the user pick more than one document.
   final bool allowMultipleDocuments;
 
+  /// Whether the system media picker lets the user pick more than one item.
+  ///
+  /// False means the picker forces a single pick — what `BrowseFiles.show`
+  /// does when [maxSelection] is `1` regardless.
+  final bool allowMultipleMedia;
+
   /// The sheet's background, or `null` to follow the app's theme.
   ///
   /// Telegram's attach sheet is dark whatever the app around it looks like;
@@ -104,10 +109,33 @@ class OCBrowseFilesOptions {
   /// theme's primary.
   final Color? accentColor;
 
-  /// Called when the camera tile is tapped.
+  /// Whether the sheet offers the camera at all.
   ///
-  /// The live camera preview tile is out of this package's scope, so the tile
-  /// only appears when the host app supplies this and is expected to open
-  /// whatever camera it already uses.
+  /// When true the sheet's camera tile — and the camera rows of
+  /// `OCBrowseFiles.showActions` — open the system camera through
+  /// `captureMedia`: a photo if [types] holds [OCMediaType.image], a video if
+  /// it holds [OCMediaType.video], and a choice of the two when it holds
+  /// both. The capture lands in the selection like any picked item.
+  ///
+  /// The live camera preview tile Telegram draws is out of this package's
+  /// scope; this is the system camera app.
+  final bool showCamera;
+
+  /// Replaces the built-in camera with the host app's own.
+  ///
+  /// When set, tapping the camera tile calls this instead of `captureMedia`
+  /// and the host app is expected to open whatever camera it already uses.
+  /// Ignored when [showCamera] is false.
   final VoidCallback? onCameraTap;
+
+  /// Which kinds the built-in camera can capture, in the order they are
+  /// offered: empty when [showCamera] is false or [types] holds neither.
+  List<OCMediaType> get cameraTypes => <OCMediaType>[
+    if (showCamera && types.contains(OCMediaType.image)) OCMediaType.image,
+    if (showCamera && types.contains(OCMediaType.video)) OCMediaType.video,
+  ];
+
+  /// Whether the camera tile should be drawn.
+  bool get hasCamera =>
+      showCamera && (onCameraTap != null || cameraTypes.isNotEmpty);
 }

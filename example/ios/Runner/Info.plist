@@ -45,11 +45,11 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>This example browses the photos and videos in your library so you can test browse_files_flutter. Choosing "Select Photos" is supported: the grid then shows only what you shared.</string>
+	<!-- browse_files_flutter asks for no photo library access: the system picker runs out of
+	     process. The camera does need these two; without them iOS kills the app. -->
 	<key>NSCameraUsageDescription</key>
-	<string>The attachment sheet's camera cell opens the camera so you can take a photo to attach.</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Photos taken from the attachment sheet are saved to your library so the grid can show them.</string>
+	<string>The attachment sheet opens the camera so you can take a photo or video to attach.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Videos recorded from the attachment sheet need the microphone for sound.</string>
 </dict>
 </plist>

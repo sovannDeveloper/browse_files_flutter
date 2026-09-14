@@ -1,5 +1,5 @@
 PODS:
-  - browse_files_flutter (0.0.1):
+  - browse_files_flutter (0.1.0):
     - Flutter
   - flu_wake_lock (0.0.1):
     - Flutter
@@ -24,7 +24,7 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/integration_test/ios"
 
 SPEC CHECKSUMS:
-  browse_files_flutter: 37a3a3c2d663b861829f7d1b174eab47e2ff1242
+  browse_files_flutter: 4675ad110364067ef8104ac8355e0d3fc81c342e
   flu_wake_lock: 6df04b4230d37188ba58f09a820e54acc1966ff3
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   integration_test: 4a889634ef21a45d28d50d622cf412dc6d9f586e

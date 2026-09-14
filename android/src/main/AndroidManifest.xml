@@ -1,3 +1,42 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
   package="com.kedtec.browse_files_flutter">
+
+    <!-- Lets the camera app write a capture into this app's cache. Its own subclass so the
+         host app's FileProvider, if it has one, does not collide in the merged manifest. -->
+    <application>
+        <provider
+            android:name="com.kedtec.browse_files_flutter.BrowseFilesFileProvider"
+            android:authorities="${applicationId}.browse_files_flutter.provider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/browse_files_paths" />
+        </provider>
+    </application>
+
+    <!-- Package visibility (Android 11+) for the system UIs this plugin starts. Merged into
+         the host manifest, so apps need not declare them. -->
+    <queries>
+        <intent>
+            <action android:name="android.media.action.IMAGE_CAPTURE" />
+        </intent>
+        <intent>
+            <action android:name="android.media.action.VIDEO_CAPTURE" />
+        </intent>
+        <intent>
+            <action android:name="android.provider.action.PICK_IMAGES" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.GET_CONTENT" />
+            <data android:mimeType="image/*" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.GET_CONTENT" />
+            <data android:mimeType="video/*" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.OPEN_DOCUMENT" />
+        </intent>
+    </queries>
 </manifest>

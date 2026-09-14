@@ -48,6 +48,8 @@ android {
     }
 
     dependencies {
+        // FileProvider, for handing the camera app somewhere to write.
+        implementation("androidx.core:core:1.13.1")
         testImplementation("org.jetbrains.kotlin:kotlin-test")
         testImplementation("org.mockito:mockito-core:5.0.0")
     }

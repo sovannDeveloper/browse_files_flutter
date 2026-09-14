@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The camera app writes captures here; only this one directory under the app cache is shared. -->
+<paths>
+    <cache-path name="browse_files" path="browse_files/" />
+</paths>

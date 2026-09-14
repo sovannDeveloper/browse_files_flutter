@@ -3,15 +3,18 @@ import 'package:flutter/material.dart';
 
 import '../browse_files_flutter_platform_interface.dart';
 import '../models/attachment_tab.dart';
+import '../models/browse_files_action.dart';
 import '../models/browse_files_exception.dart';
 import '../models/browse_files_options.dart';
 import '../models/browse_files_result.dart';
 import '../models/document_item.dart';
 import '../models/media_item.dart';
 import 'attachment_tab_bar.dart';
+import 'browse_files_actions.dart';
 import 'browse_files_page.dart';
 import 'document_list.dart';
 import 'media_grid.dart';
+import 'sheet_theme.dart';
 import 'thumbnail_cache.dart';
 
 /// The attachment sheet: one call, one result.
@@ -45,6 +48,33 @@ class OCBrowseFiles {
 
       builder: (context) => BrowseFilesSheet(options: options, cache: cache),
     );
+  }
+
+  /// Slides up a short menu — take a photo, record a video, select photos &
+  /// videos, select files — and runs whichever row the user taps.
+  ///
+  /// The menu closes before the camera or picker opens. Resolves to what came
+  /// back, [OCBrowseFilesResult.empty] if the user backed out of the camera or
+  /// picker, or `null` if they dismissed the menu itself. [actions] picks the
+  /// rows; by default the camera rows follow [OCBrowseFilesOptions.types].
+  ///
+  /// There is no sheet left to show a failure in, so an
+  /// [OCBrowseFilesException] from the platform is thrown to the caller.
+  static Future<OCBrowseFilesResult?> showActions(
+    BuildContext context, {
+    OCBrowseFilesOptions options = const OCBrowseFilesOptions(),
+    List<OCBrowseFilesAction>? actions,
+  }) async {
+    assert(Navigator.maybeOf(context) != null, _noNavigator);
+    final action = await showModalBottomSheet<OCBrowseFilesAction>(
+      context: context,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) =>
+          OCBrowseFilesActionsSheet(options: options, actions: actions),
+    );
+    if (action == null) return null;
+    return runBrowseFilesAction(action, options);
   }
 
   /// Pushes the full-screen browser: photos and videos in one tab, every other
@@ -129,6 +159,10 @@ class _BrowseFilesSheetState extends State<BrowseFilesSheet> {
             ? OCAttachmentTab.galleryId
             : _options.tabs.first.id);
 
+  /// The height the floating tab pill or confirm bar takes off the bottom of
+  /// the body, so nothing tappable ends up underneath it.
+  static const double _barInset = 64;
+
   /// The open tab, falling back to the gallery for an empty tab row.
   OCAttachmentTab get _activeTab => _options.tabs.firstWhere(
     (tab) => tab.id == _tabId,
@@ -192,46 +226,21 @@ class _BrowseFilesSheetState extends State<BrowseFilesSheet> {
     );
   }
 
-  /// The sheet's own theme, so a host app can hand it Telegram's dark chrome
-  /// without dyeing the app around it.
-  ///
-  /// Memoised because a drag rebuilds this widget every frame.
+  /// The sheet's theme, memoised because a drag rebuilds this widget every
+  /// frame.
   ThemeData _sheetTheme(BuildContext context) {
     final base = Theme.of(context);
-    final background = _options.backgroundColor;
-    final accent = _options.accentColor;
-    final key = Object.hash(base, background, accent);
+    final key = Object.hash(
+      base,
+      _options.backgroundColor,
+      _options.accentColor,
+    );
     final cached = _theme;
     if (cached != null && _themeKey == key) return cached;
-
-    final ThemeData built;
-    if (background == null) {
-      built = accent == null
-          ? base
-          : base.copyWith(
-              colorScheme: base.colorScheme.copyWith(primary: accent),
-            );
-    } else {
-      built = ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: accent ?? base.colorScheme.primary,
-          brightness: ThemeData.estimateBrightnessForColor(background),
-        ).copyWith(surface: background, primary: accent),
-      );
-    }
+    final built = buildSheetTheme(base, _options);
     _theme = built;
     _themeKey = key;
     return built;
-  }
-
-  /// One step away from the sheet's surface, so the tab bar reads as a bar.
-  Color _barColor(ThemeData theme) {
-    final surface = theme.colorScheme.surface;
-    final tint =
-        ThemeData.estimateBrightnessForColor(surface) == Brightness.dark
-        ? Colors.white
-        : Colors.black;
-    return Color.alphaBlend(tint.withValues(alpha: 0.07), surface);
   }
 
   @override
@@ -266,7 +275,7 @@ class _BrowseFilesSheetState extends State<BrowseFilesSheet> {
               children: [
                 Column(
                   children: [
-                    const _DragHandle(),
+                    const SheetDragHandle(),
                     Expanded(child: _body(scrollController, theme)),
                   ],
                 ),
@@ -285,7 +294,7 @@ class _BrowseFilesSheetState extends State<BrowseFilesSheet> {
                                 OCAttachmentTabBar(
                                   tabs: _options.tabs,
                                   activeId: _tabId,
-                                  barColor: _barColor(theme),
+                                  barColor: sheetBarColor(theme),
                                   onSelected: (tab) =>
                                       setState(() => _tabId = tab.id),
                                 ),
@@ -316,6 +325,7 @@ class _BrowseFilesSheetState extends State<BrowseFilesSheet> {
         onToggle: _toggleMedia,
         scrollController: scrollController,
         canSelectMore: _canSelectMore,
+        bottomInset: _barInset,
       );
     }
     if (tab.id == OCAttachmentTab.fileId && tab.isBuiltIn) {
@@ -326,6 +336,7 @@ class _BrowseFilesSheetState extends State<BrowseFilesSheet> {
         onToggle: _toggleDocument,
         scrollController: scrollController,
         canSelectMore: _canSelectMore,
+        bottomInset: _barInset,
       );
     }
     final builder = tab.builder;
@@ -346,7 +357,7 @@ class _BrowseFilesSheetState extends State<BrowseFilesSheet> {
     final strings = _options.text;
     return Parent(
       style: ParentStyle()
-        ..background.color(_barColor(theme))
+        ..background.color(sheetBarColor(theme))
         ..margin(horizontal: 16, bottom: 10)
         ..borderRadius(all: 106)
         ..padding(left: 16, top: 4, right: 8, bottom: 4)
@@ -397,23 +408,6 @@ class _Fill extends StatelessWidget {
       child: ConstrainedBox(
         constraints: BoxConstraints(minHeight: constraints.maxHeight),
         child: child,
-      ),
-    ),
-  );
-}
-
-class _DragHandle extends StatelessWidget {
-  const _DragHandle();
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 8),
-    child: Container(
-      width: 36,
-      height: 4,
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.outlineVariant,
-        borderRadius: BorderRadius.circular(2),
       ),
     ),
   );

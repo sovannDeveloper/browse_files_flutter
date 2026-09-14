@@ -1,3 +1,27 @@
+## 0.1.0
+
+* `captureMedia(type:)`: the system camera, for a photo or a video. Android runs
+  `ACTION_IMAGE_CAPTURE` / `ACTION_VIDEO_CAPTURE` into the app cache through a `FileProvider`
+  the plugin declares itself; iOS runs `UIImagePickerController` with the camera source. No
+  `CAMERA` or storage permission is declared — iOS only needs `NSCameraUsageDescription` (and
+  `NSMicrophoneUsageDescription` for video), which the plugin checks for before opening the
+  camera rather than letting iOS kill the app. The capture comes back as an `OCMediaItem`
+  whose id is already a file, or `null` when the user backed out.
+* `OCBrowseFiles.showActions`: a short menu — take photo · record video · select photos &
+  videos · select files. The menu closes before the camera or picker opens and resolves to the
+  same `OCBrowseFilesResult` as the sheet. `OCBrowseFilesAction` names the rows.
+* The sheet's camera cell now opens the built-in camera by default (a photo/video choice when
+  both kinds are allowed) and the shot lands in the selection. `onCameraTap` still replaces it
+  with the host app's camera; the new `showCamera: false` hides it.
+* iOS caught up with the permissionless design: `pickMedia` is `PHPickerViewController`
+  (iOS 14+, `UIImagePickerController` on iOS 13), picks are copied into the cache and their
+  ids are paths, and the dead `permissionStatus` / `fetchMedia` / `fetchDocuments` handlers
+  are gone. Cache copies no longer overwrite an earlier file of the same name.
+* New strings: `actionsTitle`, `takePhotoLabel`, `recordVideoLabel`, `selectMediaLabel`,
+  `selectFilesLabel`, `cameraErrorTitle`.
+* The example app drops its own camera channel and drives the menu, the sheet and
+  `captureMedia` directly.
+
 ## 0.0.1
 
 * Initial scaffold: plugin skeleton, method channel wiring and example app.

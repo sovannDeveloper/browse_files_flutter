@@ -1,17 +1,12 @@
 package com.kedtec.browse_files_flutter
 
-import android.Manifest
 import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
-import android.content.SharedPreferences
-import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Build
-import android.os.Handler
-import android.os.Looper
-import android.provider.Settings
+import android.provider.MediaStore
+import androidx.core.content.FileProvider
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.embedding.engine.plugins.activity.ActivityAware
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
@@ -20,44 +15,57 @@ import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
 import io.flutter.plugin.common.PluginRegistry.ActivityResultListener
-import io.flutter.plugin.common.PluginRegistry.RequestPermissionsResultListener
+import java.io.File
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import android.os.Handler
+import android.os.Looper
 
 /**
  * Android side of `browse_files_flutter`.
  *
- * Media access is not binary here: on API 34+ the user can grant
- * READ_MEDIA_VISUAL_USER_SELECTED alone, which is reported as "limited" and re-opens the system
- * photo picker rather than counting as a refusal.
+ * Media access on Android 13+ goes through the system Photo Picker
+ * (`MediaStore.ACTION_PICK_IMAGES`), which deliberately does not require any
+ * `READ_MEDIA_*` permission — that is the whole reason the picker exists, and
+ * why apps that just want to attach a photo can ship without those
+ * permissions on Google Play.
  *
- * Every library read runs on [worker] and replies on the main thread — cursor walks and file
- * copies must not block the platform thread while the grid is scrolling. The queries themselves
- * live in [MediaStoreReader].
+ * Below API 33 the picker falls back to `ACTION_GET_CONTENT` with the
+ * appropriate MIME types, which has worked without permissions since Android
+ * 1.0.
  *
- * The host app must declare the permissions it wants in its own manifest; an undeclared
- * permission is denied without ever showing a dialog. See `example/android`.
+ * Documents still go through the Storage Access Framework
+ * (`ACTION_OPEN_DOCUMENT`). SAF never required a media permission either.
+ *
+ * The camera is the system camera app (`ACTION_IMAGE_CAPTURE` / `ACTION_VIDEO_CAPTURE`)
+ * writing into this app's cache through [BrowseFilesFileProvider], so a capture needs no
+ * CAMERA or storage permission and comes back as a `file://` id that is already resolved.
  *
  * Errors come back as `result.error(code, message, details)` with a code from
- * BrowseFilesErrorCode: permissionDenied, userCanceled, notFound, ioError, unsupported.
+ * `BrowseFilesErrorCode`: `permissionDenied`, `userCanceled`, `notFound`,
+ * `ioError`, `unsupported`.
  */
 class BrowseFilesFlutterPlugin :
     FlutterPlugin,
     ActivityAware,
     MethodCallHandler,
-    RequestPermissionsResultListener,
     ActivityResultListener {
     private lateinit var channel: MethodChannel
     private var context: Context? = null
     private var activity: Activity? = null
     private var activityBinding: ActivityPluginBinding? = null
 
-    /** The reply waiting on the system permission dialog, with the types it asked about. */
-    private var pendingResult: Result? = null
-    private var pendingTypes: Set<String> = emptySet()
+    /** The reply waiting on the system media picker, with the max it was told to allow. */
+    private var pendingMedia: Result? = null
+    private var mediaMaxSelection: Int = 0
 
     /** The reply waiting on the system document picker. */
     private var pendingDocuments: Result? = null
+
+    /** The reply waiting on the camera, and the file the camera was told to write. */
+    private var pendingCapture: Result? = null
+    private var captureTarget: File? = null
+    private var captureIsVideo: Boolean = false
 
     /**
      * Created on first use, not on construction: touching Looper in a constructor makes the
@@ -93,7 +101,6 @@ class BrowseFilesFlutterPlugin :
     override fun onAttachedToActivity(binding: ActivityPluginBinding) {
         activityBinding = binding
         activity = binding.activity
-        binding.addRequestPermissionsResultListener(this)
         binding.addActivityResultListener(this)
     }
 
@@ -110,7 +117,6 @@ class BrowseFilesFlutterPlugin :
     }
 
     private fun detachActivity() {
-        activityBinding?.removeRequestPermissionsResultListener(this)
         activityBinding?.removeActivityResultListener(this)
         activityBinding = null
         activity = null
@@ -121,201 +127,82 @@ class BrowseFilesFlutterPlugin :
         result: Result
     ) {
         when (call.method) {
-            "permissionStatus" -> result.success(statusOf(typesOf(call)))
-            "requestPermission" -> requestPermission(typesOf(call), result)
-            "presentLimitedPicker" -> presentLimitedPicker(result)
-            "openSettings" -> openSettings(result)
-            "fetchAlbums" -> fetchAlbums(call, result)
-            "fetchMedia" -> fetchMedia(call, result)
+            "pickMedia" -> pickMedia(typesOf(call), allowMultipleOf(call), result)
             "loadThumbnail" -> loadThumbnail(call, result)
             "resolveFile" -> resolveFile(call, result)
-            "fetchDocuments" -> fetchDocuments(call, result)
             "pickDocuments" -> pickDocuments(call, result)
+            "captureMedia" -> captureMedia(call, result)
             else -> result.notImplemented()
         }
     }
 
-    /** Asks for whatever [types] needs, answering with the access level the user settled on. */
-    private fun requestPermission(
+    /**
+     * Opens the system media picker and returns what the user chose.
+     *
+     * On API 33+ this is the dedicated Photo Picker activity; below that we fall
+     * back to `ACTION_GET_CONTENT`, which has never required a permission.
+     */
+    private fun pickMedia(
         types: Set<String>,
+        allowMultiple: Boolean,
         result: Result
     ) {
         val activity = activity
         if (activity == null) {
             result.error(
                 UNSUPPORTED,
-                "Asking for media access needs a foreground activity.",
+                "Picking media needs a foreground activity.",
                 null
             )
             return
         }
-        if (pendingResult != null) {
-            result.error(UNKNOWN, "A permission request is already in flight.", null)
+        if (pendingMedia != null) {
+            result.error(UNKNOWN, "A media picker is already open.", null)
             return
         }
-        val requested = requestedPermissions(types)
-        if (requested.isEmpty()) {
-            result.error(UNSUPPORTED, "No media type was asked for.", null)
-            return
-        }
-        // Already fully granted: the system would return immediately anyway.
-        if (statusOf(types) == GRANTED) {
-            result.success(GRANTED)
-            return
-        }
-        pendingResult = result
-        pendingTypes = types
-        markAsked()
-        activity.requestPermissions(requested.toTypedArray(), PERMISSION_REQUEST_CODE)
-    }
-
-    /**
-     * Re-opens the system photo picker so a limited grant can be widened.
-     *
-     * On API 34+ re-requesting READ_MEDIA_VISUAL_USER_SELECTED while partially granted is what
-     * shows the "select more photos" sheet; there is no such thing below that.
-     */
-    private fun presentLimitedPicker(result: Result) {
-        if (!partialGrantSupported) {
-            result.error(
-                UNSUPPORTED,
-                "Partial media access needs Android 14 (API 34) or newer.",
-                null
-            )
-            return
-        }
-        if (statusOf(ALL_TYPES) != LIMITED) {
-            result.error(
-                UNSUPPORTED,
-                "The photo picker only re-opens while access is limited.",
-                null
-            )
-            return
-        }
-        requestPermission(ALL_TYPES, result)
-    }
-
-    private fun openSettings(result: Result) {
-        val context = context
-        if (context == null) {
-            result.error(UNSUPPORTED, "The plugin is not attached to an engine.", null)
-            return
-        }
-        val intent =
-            Intent(
-                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                Uri.fromParts("package", context.packageName, null)
-            )
-        val host: Context = activity ?: context.also { intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+        pendingMedia = result
+        mediaMaxSelection = callMaxSelection() ?: 0
         try {
-            host.startActivity(intent)
-            result.success(true)
+            activity.startActivityForResult(pickerIntent(types, allowMultiple), MEDIA_REQUEST_CODE)
         } catch (error: ActivityNotFoundException) {
-            result.success(false)
+            pendingMedia = null
+            result.error(UNSUPPORTED, "This device has no media picker.", null)
         }
     }
 
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ): Boolean {
-        if (requestCode != PERMISSION_REQUEST_CODE) return false
-        val result = pendingResult ?: return false
-        val types = pendingTypes
-        pendingResult = null
-        pendingTypes = emptySet()
-        // Read the grants back rather than trusting grantResults: a partial grant denies
-        // READ_MEDIA_IMAGES and grants READ_MEDIA_VISUAL_USER_SELECTED instead.
-        result.success(statusOf(types))
-        return true
-    }
-
-    /** The access level right now, without prompting. */
-    private fun statusOf(types: Set<String>): String {
-        val context = context ?: return DENIED
-        val required = requiredPermissions(types)
-        if (required.isEmpty()) return DENIED
-        if (required.all { context.isGranted(it) }) return GRANTED
-        if (partialGrantSupported &&
-            context.isGranted(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
-        ) {
-            return LIMITED
-        }
-        if (!hasAsked()) return NOT_DETERMINED
-        // Without an activity there is no rationale to read, so report the safer answer.
-        val activity = activity ?: return DENIED
-        val canAskAgain = required.any { activity.shouldShowRequestPermissionRationale(it) }
-        return if (canAskAgain) DENIED else PERMANENTLY_DENIED
-    }
-
-    /** The permissions that must be held to read [types] in full. */
-    private fun requiredPermissions(types: Set<String>): List<String> =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            buildList {
-                if (IMAGE in types) add(Manifest.permission.READ_MEDIA_IMAGES)
-                if (VIDEO in types) add(Manifest.permission.READ_MEDIA_VIDEO)
+    private fun pickerIntent(types: Set<String>, allowMultiple: Boolean): Intent {
+        val mimeTypes = mimeTypesOf(types)
+        val intent =
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                Intent(MediaPickerAction.ACTION_PICK_IMAGES).apply {
+                    putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes)
+                    if (allowMultiple) {
+                        putExtra(MediaPickerAction.EXTRA_ALLOW_MULTIPLE, true)
+                    }
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+            } else {
+                Intent(Intent.ACTION_GET_CONTENT).apply {
+                    type = if (mimeTypes.size == 1) mimeTypes.first() else "*/*"
+                    if (mimeTypes.size > 1) {
+                        putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes)
+                    }
+                    if (allowMultiple) {
+                        putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                    }
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
             }
-        } else if (types.isEmpty()) {
-            emptyList()
-        } else {
-            listOf(Manifest.permission.READ_EXTERNAL_STORAGE)
-        }
-
-    /**
-     * What to hand [Activity.requestPermissions].
-     *
-     * READ_MEDIA_VISUAL_USER_SELECTED has to travel with the full-access permissions, otherwise
-     * API 34+ never offers the "select photos" choice.
-     */
-    private fun requestedPermissions(types: Set<String>): List<String> {
-        val required = requiredPermissions(types)
-        if (required.isEmpty() || !partialGrantSupported) return required
-        return required + Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED
+        return intent
     }
 
-    private val partialGrantSupported: Boolean
-        get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
-
-    private fun Context.isGranted(permission: String): Boolean =
-        checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
-
-    private fun typesOf(call: MethodCall): Set<String> =
-        call.argument<List<String>>("types")?.toSet() ?: ALL_TYPES
-
-    /**
-     * Whether the dialog has ever been shown.
-     *
-     * Android cannot tell "never asked" from "asked and refused for good" — both read as denied
-     * with no rationale — so the first ask is recorded here.
-     */
-    private fun hasAsked(): Boolean = prefs()?.getBoolean(KEY_ASKED, false) ?: false
-
-    private fun markAsked() {
-        prefs()?.edit()?.putBoolean(KEY_ASKED, true)?.apply()
-    }
-
-    private fun prefs(): SharedPreferences? = context?.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-
-    private fun fetchAlbums(
-        call: MethodCall,
-        result: Result
-    ) {
-        val types = typesOf(call)
-        onLibrary(result) { context -> MediaStoreReader.fetchAlbums(context, types) }
-    }
-
-    private fun fetchMedia(
-        call: MethodCall,
-        result: Result
-    ) {
-        val types = typesOf(call)
-        val albumId = call.argument<String>("albumId")
-        val offset = call.argument<Int>("offset") ?: 0
-        val limit = call.argument<Int>("limit") ?: 50
-        onLibrary(result) { context ->
-            MediaStoreReader.fetchMedia(context, types, albumId, offset, limit)
-        }
+    private fun mimeTypesOf(types: Set<String>): Array<String> {
+        val list = mutableListOf<String>()
+        if (IMAGE in types) list.add("image/*")
+        if (VIDEO in types) list.add("video/*")
+        if (list.isEmpty()) list.add("*/*")
+        return list.toTypedArray()
     }
 
     private fun loadThumbnail(
@@ -330,8 +217,8 @@ class BrowseFilesFlutterPlugin :
         val width = call.argument<Int>("width") ?: 256
         val height = call.argument<Int>("height") ?: 256
         val quality = call.argument<Int>("quality") ?: 80
-        onLibrary(result) { context ->
-            MediaStoreReader.loadThumbnail(context, id, width, height, quality)
+        onWorker(result) { context ->
+            MediaStoreReader.loadThumbnail(context, Uri.parse(id), width, height, quality)
         }
     }
 
@@ -345,19 +232,7 @@ class BrowseFilesFlutterPlugin :
             return
         }
         // A null path crosses the channel as notFound, which is what a missing asset is.
-        onLibrary(result) { context -> MediaStoreReader.resolveFile(context, id) }
-    }
-
-    private fun fetchDocuments(
-        call: MethodCall,
-        result: Result
-    ) {
-        val mimeTypes = call.argument<List<String>>("mimeTypes") ?: emptyList()
-        val offset = call.argument<Int>("offset") ?: 0
-        val limit = call.argument<Int>("limit") ?: 50
-        onLibrary(result) { context ->
-            MediaStoreReader.fetchDocuments(context, mimeTypes, offset, limit)
-        }
+        onWorker(result) { context -> MediaStoreReader.copyToCache(context, Uri.parse(id)) }
     }
 
     /**
@@ -399,12 +274,138 @@ class BrowseFilesFlutterPlugin :
         }
     }
 
+    /**
+     * Opens the system camera for a photo or a video.
+     *
+     * The capture goes into the plugin's cache directory through the FileProvider rather
+     * than into the user's library: no storage permission, nothing left behind in the
+     * gallery, and the id handed back is already a file the host app owns.
+     */
+    private fun captureMedia(
+        call: MethodCall,
+        result: Result
+    ) {
+        val activity = activity
+        val context = context
+        if (activity == null || context == null) {
+            result.error(UNSUPPORTED, "Opening the camera needs a foreground activity.", null)
+            return
+        }
+        if (pendingCapture != null) {
+            result.error(UNKNOWN, "The camera is already open.", null)
+            return
+        }
+        val isVideo = call.argument<String>("type") == VIDEO
+        val target =
+            File(MediaStoreReader.cacheDirectory(context), captureName(isVideo))
+        val uri =
+            FileProvider.getUriForFile(context, "${context.packageName}$PROVIDER_SUFFIX", target)
+        val intent =
+            Intent(if (isVideo) MediaStore.ACTION_VIDEO_CAPTURE else MediaStore.ACTION_IMAGE_CAPTURE)
+                .putExtra(MediaStore.EXTRA_OUTPUT, uri)
+                .addFlags(
+                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+        pendingCapture = result
+        captureTarget = target
+        captureIsVideo = isVideo
+        try {
+            activity.startActivityForResult(intent, CAPTURE_REQUEST_CODE)
+        } catch (error: ActivityNotFoundException) {
+            clearCapture()
+            result.error(UNSUPPORTED, "This device has no camera app.", null)
+        } catch (error: SecurityException) {
+            // A host app that declares CAMERA but has not been granted it lands here: once
+            // the permission is declared, the camera intent starts requiring it.
+            clearCapture()
+            result.error(PERMISSION_DENIED, error.message ?: "The camera may not be opened.", null)
+        }
+    }
+
+    private fun captureName(isVideo: Boolean): String =
+        "capture_${System.currentTimeMillis()}.${if (isVideo) "mp4" else "jpg"}"
+
+    private fun clearCapture() {
+        pendingCapture = null
+        captureTarget = null
+    }
+
     override fun onActivityResult(
         requestCode: Int,
         resultCode: Int,
         data: Intent?
-    ): Boolean {
-        if (requestCode != DOCUMENT_REQUEST_CODE) return false
+    ): Boolean = when (requestCode) {
+        MEDIA_REQUEST_CODE -> handleMediaResult(resultCode, data)
+        DOCUMENT_REQUEST_CODE -> handleDocumentResult(resultCode, data)
+        CAPTURE_REQUEST_CODE -> handleCaptureResult(resultCode, data)
+        else -> false
+    }
+
+    /**
+     * Describes the capture, or answers null when the user backed out.
+     *
+     * Some camera apps ignore `EXTRA_OUTPUT` for video and hand the clip back as `data.data`
+     * instead; that copy is pulled into the target file so the reply is the same either way.
+     */
+    private fun handleCaptureResult(resultCode: Int, data: Intent?): Boolean {
+        val result = pendingCapture ?: return false
+        val target = captureTarget
+        val isVideo = captureIsVideo
+        clearCapture()
+        val context = context
+        if (resultCode != Activity.RESULT_OK || target == null || context == null) {
+            target?.delete()
+            result.success(null)
+            return true
+        }
+        val fallback = data?.data
+        worker.execute {
+            val described =
+                runCatching {
+                    if (target.length() == 0L && fallback != null) {
+                        context.contentResolver.openInputStream(fallback)?.use { input ->
+                            target.outputStream().use { output -> input.copyTo(output) }
+                        }
+                    }
+                    if (target.length() == 0L) null else MediaStoreReader.describeFile(target, isVideo)
+                }.getOrNull()
+            if (described == null) target.delete()
+            main.post { result.success(described) }
+        }
+        return true
+    }
+
+    /**
+     * Pulls the URIs out of the picker, describes each one on a worker, and answers
+     * with the list — or an empty list when the user backed out.
+     */
+    private fun handleMediaResult(resultCode: Int, data: Intent?): Boolean {
+        val result = pendingMedia ?: return false
+        pendingMedia = null
+        val context = context
+        if (context == null) {
+            result.error(UNSUPPORTED, "The plugin is not attached to an engine.", null)
+            return true
+        }
+        if (resultCode != Activity.RESULT_OK || data == null) {
+            // Backing out of the picker is a normal outcome, not a failure.
+            result.success(emptyList<Map<String, Any?>>())
+            return true
+        }
+        val uris = collectUris(data)
+        val maxSelection = mediaMaxSelection
+        val limited = if (maxSelection > 0) uris.take(maxSelection) else uris
+        worker.execute {
+            val described =
+                limited.mapNotNull { uri ->
+                    runCatching { MediaStoreReader.describe(context, uri) }.getOrNull()
+                }
+            main.post { result.success(described) }
+        }
+        return true
+    }
+
+    private fun handleDocumentResult(resultCode: Int, data: Intent?): Boolean {
         val result = pendingDocuments ?: return false
         pendingDocuments = null
         val context = context
@@ -413,27 +414,51 @@ class BrowseFilesFlutterPlugin :
             result.success(emptyList<String>())
             return true
         }
-        val uris = mutableListOf<Uri>()
-        data.clipData?.let { clip ->
-            for (index in 0 until clip.itemCount) {
-                uris.add(clip.getItemAt(index).uri)
-            }
-        }
-        data.data?.let { uris.add(it) }
+        val uris = collectUris(data)
         worker.execute {
-            val paths = uris.mapNotNull { uri -> runCatching { MediaStoreReader.copyToCache(context, uri) }.getOrNull() }
+            val paths =
+                uris.mapNotNull { uri ->
+                    runCatching { MediaStoreReader.copyToCache(context, uri) }.getOrNull()
+                }
             main.post { result.success(paths) }
         }
         return true
     }
 
     /**
-     * Runs a library read off the platform thread and replies on it.
+     * Extracts every URI from a picker result.
      *
-     * A SecurityException here means the grant was revoked while the sheet was open, which is a
-     * permission problem rather than an I/O one.
+     * The single-selection case lives in `data.data`; multi-selection puts each
+     * URI on a separate `ClipData.Item`. The Photo Picker can also leave the
+     * URI on `Intent.EXTRA_STREAM` for some flows, and Android 14+ may report
+     * `ClipData` even for a single pick — every plausible source is checked.
      */
-    private fun onLibrary(
+    private fun collectUris(data: Intent): List<Uri> {
+        val uris = LinkedHashSet<Uri>()
+        data.clipData?.let { clip ->
+            if (clip.itemCount > 1) {
+                for (index in 0 until clip.itemCount) {
+                    uris.add(clip.getItemAt(index).uri)
+                }
+            } else {
+                clip.getItemAt(0)?.uri?.let { uris.add(it) }
+            }
+        }
+        data.data?.let { uris.add(it) }
+        val stream = data.extras?.get(Intent.EXTRA_STREAM) as? Uri
+        if (stream != null) uris.add(stream)
+        val streams = data.extras?.getParcelableArrayList<Uri>(Intent.EXTRA_STREAM)
+        streams?.forEach { uris.add(it) }
+        return uris.toList()
+    }
+
+    /**
+     * Runs a worker task and replies on the main thread.
+     *
+     * A SecurityException here means the picker grant was lost while the worker
+     * was using it; that is an I/O problem from the caller's point of view.
+     */
+    private fun onWorker(
         result: Result,
         work: (Context) -> Any?
     ) {
@@ -449,8 +474,8 @@ class BrowseFilesFlutterPlugin :
             } catch (error: SecurityException) {
                 main.post {
                     result.error(
-                        PERMISSION_DENIED,
-                        error.message ?: "The media library is not readable.",
+                        IO_ERROR,
+                        error.message ?: "The asset is no longer readable.",
                         null
                     )
                 }
@@ -458,7 +483,7 @@ class BrowseFilesFlutterPlugin :
                 main.post {
                     result.error(
                         IO_ERROR,
-                        error.message ?: "The media library could not be read.",
+                        error.message ?: "The asset could not be read.",
                         null
                     )
                 }
@@ -466,24 +491,26 @@ class BrowseFilesFlutterPlugin :
         }
     }
 
+    private fun typesOf(call: MethodCall): Set<String> =
+        call.argument<List<String>>("types")?.toSet() ?: ALL_TYPES
+
+    private fun allowMultipleOf(call: MethodCall): Boolean =
+        call.argument<Boolean>("allowMultiple") ?: true
+
+    private fun callMaxSelection(): Int? = null
+
     private companion object {
         const val CHANNEL = "com.kedtec.browse_files_flutter/methods"
-        const val PERMISSION_REQUEST_CODE = 0xBF17
+        const val MEDIA_REQUEST_CODE = 0xBF19
         const val DOCUMENT_REQUEST_CODE = 0xBF18
+        const val CAPTURE_REQUEST_CODE = 0xBF17
 
-        const val PREFS = "com.kedtec.browse_files_flutter"
-        const val KEY_ASKED = "hasAskedForMediaAccess"
+        /** Matches the authority declared in the plugin manifest. */
+        const val PROVIDER_SUFFIX = ".browse_files_flutter.provider"
 
         const val IMAGE = "image"
         const val VIDEO = "video"
         val ALL_TYPES = setOf(IMAGE, VIDEO)
-
-        // MediaPermissionStatus on the Dart side.
-        const val GRANTED = "granted"
-        const val LIMITED = "limited"
-        const val DENIED = "denied"
-        const val PERMANENTLY_DENIED = "permanentlyDenied"
-        const val NOT_DETERMINED = "notDetermined"
 
         // BrowseFilesErrorCode on the Dart side.
         const val PERMISSION_DENIED = "permissionDenied"
@@ -491,5 +518,18 @@ class BrowseFilesFlutterPlugin :
         const val IO_ERROR = "ioError"
         const val UNSUPPORTED = "unsupported"
         const val UNKNOWN = "unknown"
+    }
+
+    /**
+     * The action and extra names for the system Photo Picker, so they are not
+     * pasted as string literals across the file.
+     *
+     * The constants live in the framework on API 33+; spelling them out here
+     * keeps the file readable and lets the compiler point at the call site if
+     * Google renames one.
+     */
+    private object MediaPickerAction {
+        const val ACTION_PICK_IMAGES = "android.provider.action.PICK_IMAGES"
+        const val EXTRA_ALLOW_MULTIPLE = "android.provider.extra.ACCEPT_MULTIPLE"
     }
 }

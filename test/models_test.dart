@@ -18,7 +18,7 @@ void main() {
   group('MediaItem', () {
     test('parses a video, duration included', () {
       final item = OCMediaItem.fromMap(const {
-        'id': '42',
+        'id': 'content://media/picker/0/42',
         'type': 'video',
         'width': 1920,
         'height': 1080,
@@ -29,7 +29,7 @@ void main() {
         'sizeBytes': 1024,
       });
 
-      expect(item.id, '42');
+      expect(item.id, 'content://media/picker/0/42');
       expect(item.isVideo, isTrue);
       expect(item.duration, const Duration(milliseconds: 5567000));
       expect(item.aspectRatio, closeTo(16 / 9, 0.001));
@@ -41,7 +41,7 @@ void main() {
 
     test('an image has no duration, and survives a map round trip', () {
       final item = OCMediaItem.fromMap(const {
-        'id': '7',
+        'id': 'content://media/picker/0/7',
         'type': 'image',
         'width': 100,
         'height': 200,
@@ -55,7 +55,7 @@ void main() {
 
     test('falls back to a square ratio when dimensions are missing', () {
       final item = OCMediaItem.fromMap(const {
-        'id': '7',
+        'id': 'content://media/picker/0/7',
         'type': 'image',
         'createdAtMs': 0,
       });
@@ -64,66 +64,28 @@ void main() {
     });
   });
 
-  group('MediaPage', () {
-    test('knows whether another page follows', () {
-      final page = OCMediaPage.fromMap(const {
-        'items': [
-          {'id': '1', 'type': 'image', 'createdAtMs': 0},
-          {'id': '2', 'type': 'image', 'createdAtMs': 0},
-        ],
-        'offset': 0,
-        'total': 5,
-      });
-
-      expect(page.items, hasLength(2));
-      expect(page.hasMore, isTrue);
-      expect(
-        OCMediaPage.fromMap(const {
-          'items': [],
-          'offset': 5,
-          'total': 5,
-        }).hasMore,
-        isFalse,
-      );
-      expect(OCMediaPage.empty.hasMore, isFalse);
-    });
-  });
-
-  group('MediaAlbum', () {
+  group('DocumentItem', () {
     test('parses the channel representation', () {
-      final album = OCMediaAlbum.fromMap(const {
-        'id': 'all',
-        'name': 'All media',
-        'count': 12,
-        'isAll': true,
+      final item = OCDocumentItem.fromMap(const {
+        'id': '7',
+        'name': 'notes.pdf',
+        'mimeType': 'application/pdf',
+        'sizeBytes': 512,
       });
 
-      expect(album.name, 'All media');
-      expect(album.count, 12);
-      expect(album.isAll, isTrue);
-      expect(album.coverId, isNull);
-    });
-  });
-
-  group('MediaPermissionStatus', () {
-    test('limited can browse and does not need settings', () {
-      expect(OCMediaPermissionStatus.limited.canBrowse, isTrue);
-      expect(OCMediaPermissionStatus.limited.needsSettings, isFalse);
-      expect(OCMediaPermissionStatus.granted.canBrowse, isTrue);
-      expect(OCMediaPermissionStatus.denied.canBrowse, isFalse);
-      expect(OCMediaPermissionStatus.permanentlyDenied.needsSettings, isTrue);
-      expect(OCMediaPermissionStatus.restricted.needsSettings, isTrue);
+      expect(item.id, '7');
+      expect(item.name, 'notes.pdf');
+      expect(item.mimeType, 'application/pdf');
+      expect(item.sizeBytes, 512);
     });
 
-    test('an unrecognised name reads as denied', () {
-      expect(
-        OCMediaPermissionStatus.fromName('limited'),
-        OCMediaPermissionStatus.limited,
-      );
-      expect(
-        OCMediaPermissionStatus.fromName('who knows'),
-        OCMediaPermissionStatus.denied,
-      );
+    test('a path produces a fully-resolved item', () {
+      final item = OCDocumentItem.fromPath('/cache/notes.pdf', sizeBytes: 9);
+
+      expect(item.id, '/cache/notes.pdf');
+      expect(item.name, 'notes.pdf');
+      expect(item.path, '/cache/notes.pdf');
+      expect(item.isResolved, isTrue);
     });
   });
 
@@ -147,6 +109,34 @@ void main() {
     });
   });
 
+  group('BrowseFilesResult', () {
+    test('isEmpty is true when nothing was picked', () {
+      const result = OCBrowseFilesResult();
+
+      expect(result.isEmpty, isTrue);
+      expect(result.isNotEmpty, isFalse);
+      expect(result.length, 0);
+    });
+
+    test('isEmpty is false once media or documents are present', () {
+      final result = OCBrowseFilesResult(
+        media: <OCMediaItem>[
+          OCMediaItem(
+            id: 'a',
+            type: OCMediaType.image,
+            width: 1,
+            height: 1,
+            createdAt: DateTime(2026, 1, 1),
+          ),
+        ],
+      );
+
+      expect(result.isEmpty, isFalse);
+      expect(result.isNotEmpty, isTrue);
+      expect(result.length, 1);
+    });
+  });
+
   group('BrowseFilesStrings', () {
     test('leaves the strings it was not given alone', () {
       const defaults = OCBrowseFilesStrings();
@@ -155,9 +145,8 @@ void main() {
       expect(translated.confirmLabel, 'Envoyer');
       expect(translated.retryLabel, defaults.retryLabel);
       expect(translated.confirmButton('Envoyer', 3), 'Envoyer (3)');
-      expect(defaults.albumItemCount(1), '1 item');
-      expect(defaults.albumItemCount(12), '12 items');
       expect(defaults.selectionSummary(2, 1, 10), '2 media · 1 files (max 10)');
+      expect(defaults.galleryEmptyTitle, isNotEmpty);
     });
 
     test('options.confirmLabel overrides the one in the strings', () {

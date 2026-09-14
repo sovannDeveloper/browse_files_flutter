@@ -1,235 +1,58 @@
 package com.kedtec.browse_files_flutter
 
 import android.content.ContentResolver
-import android.content.ContentUris
 import android.content.Context
-import android.database.Cursor
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.media.ExifInterface
+import android.media.MediaMetadataRetriever
+import android.media.ThumbnailUtils
 import android.net.Uri
 import android.os.Build
-import android.os.Bundle
-import android.provider.MediaStore
+import android.provider.OpenableColumns
 import android.util.Size
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
-import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Everything that reads MediaStore, kept apart from the channel plumbing.
+ * Reads bytes off a content URI.
  *
- * Every function here blocks and must be called off the main thread: these are cursor walks and
- * file copies, and the grid scrolls while they run. The maps handed back are exactly the shapes
- * `MediaItem.fromMap`, `MediaAlbum.fromMap` and `MediaPage.fromMap` read on the Dart side.
+ * The plugin never sees a `MediaStore` row id any more: the system Photo Picker hands
+ * back content URIs and the SAF picker hands back file URIs, and both work the same way
+ * here. A camera capture is a `file://` URI into the plugin's own cache, which has no
+ * provider behind it — those are read straight off disk. Functions block and must be
+ * called off the main thread — they walk cursors and copy streams while the grid scrolls.
+ *
+ * The maps handed back are exactly the shapes `MediaItem.fromMap` reads on the Dart
+ * side.
  */
 internal object MediaStoreReader {
-    /** The synthetic album that means "the whole library". */
-    const val ALL_ALBUM_ID = "all"
+    /** Where captures and resolved copies live; created on demand. */
+    fun cacheDirectory(context: Context): File =
+        File(context.cacheDir, "browse_files").apply { mkdirs() }
 
-    /** The MIME pattern that means "no filter at all". */
-    private const val ANY_MIME_TYPE = "*/*"
+    /** The file behind a `file://` id, or null for anything a provider serves. */
+    private fun fileOf(uri: Uri): File? =
+        if (uri.scheme == "file") uri.path?.let(::File)?.takeIf { it.isFile } else null
 
-    private val COLLECTION: Uri = MediaStore.Files.getContentUri("external")
-
-    /**
-     * The last row count worked out for a selection, keyed by it.
-     *
-     * Only reached when the provider does not volunteer EXTRA_TOTAL_COUNT — below Android R
-     * that is every query, and counting there means running the selection again with no LIMIT.
-     * Doing that per page turns one scroll through a large library into a scan per page. A
-     * browse always starts at offset 0, so that is where the count is taken again; the pages
-     * that follow reuse it. Concurrent because library reads run on a pool.
-     */
-    private val totals = ConcurrentHashMap<String, Int>()
-
-    private val PROJECTION =
-        arrayOf(
-            MediaStore.Files.FileColumns._ID,
-            MediaStore.Files.FileColumns.MEDIA_TYPE,
-            MediaStore.MediaColumns.WIDTH,
-            MediaStore.MediaColumns.HEIGHT,
-            MediaStore.MediaColumns.DATE_MODIFIED,
-            MediaStore.MediaColumns.DURATION,
-            MediaStore.MediaColumns.MIME_TYPE,
-            MediaStore.MediaColumns.DISPLAY_NAME,
-            MediaStore.MediaColumns.SIZE
-        )
-
-    private val DOCUMENT_PROJECTION =
-        arrayOf(
-            MediaStore.Files.FileColumns._ID,
-            MediaStore.MediaColumns.DISPLAY_NAME,
-            MediaStore.MediaColumns.SIZE,
-            MediaStore.MediaColumns.MIME_TYPE,
-            MediaStore.MediaColumns.DATE_MODIFIED
-        )
-
-    private const val SORT = "${MediaStore.MediaColumns.DATE_MODIFIED} DESC"
-
-    /** One page of an album, newest first, as `MediaPage.fromMap` expects it. */
-    fun fetchMedia(
-        context: Context,
-        types: Set<String>,
-        albumId: String?,
-        offset: Int,
-        limit: Int
-    ): Map<String, Any?> {
-        val (selection, args) = selectionFor(types, albumId)
-        val items = mutableListOf<Map<String, Any?>>()
-        var total = -1
-        query(context.contentResolver, PROJECTION, selection, args, limit, offset)?.use { cursor ->
-            total = reportedTotal(cursor)
-            while (cursor.moveToNext()) {
-                items.add(itemFrom(cursor))
-            }
-        }
-        if (total < 0) {
-            total = totalFor(context.contentResolver, selection, args, offset)
-        }
-        return mapOf("items" to items, "offset" to offset, "total" to total)
-    }
-
-    /**
-     * The albums holding at least one matching asset, "all media" first.
-     *
-     * MediaStore has no GROUP BY, so this walks the ids and buckets — three small columns —
-     * and counts them here. The rows are already newest-first, so the first id seen for a
-     * bucket is its cover.
-     */
-    fun fetchAlbums(
-        context: Context,
-        types: Set<String>
-    ): List<Map<String, Any?>> {
-        val (selection, args) = selectionFor(types, null)
-        val projection =
-            arrayOf(
-                MediaStore.Files.FileColumns._ID,
-                MediaStore.Files.FileColumns.BUCKET_ID,
-                MediaStore.Files.FileColumns.BUCKET_DISPLAY_NAME
-            )
-        val albums = LinkedHashMap<String, MutableMap<String, Any?>>()
-        var total = 0
-        var newestId: String? = null
-        context.contentResolver
-            .query(COLLECTION, projection, selection, args, SORT)
-            ?.use { cursor ->
-                while (cursor.moveToNext()) {
-                    total++
-                    val id = cursor.getLong(0).toString()
-                    if (newestId == null) newestId = id
-                    val bucketId = cursor.getString(1) ?: continue
-                    val album =
-                        albums.getOrPut(bucketId) {
-                            mutableMapOf(
-                                "id" to bucketId,
-                                "name" to (cursor.getString(2) ?: ""),
-                                "count" to 0,
-                                "coverId" to id,
-                                "isAll" to false
-                            )
-                        }
-                    album["count"] = (album["count"] as Int) + 1
-                }
-            }
-        val all =
-            mapOf(
-                "id" to ALL_ALBUM_ID,
-                "name" to "All media",
-                "count" to total,
-                "coverId" to newestId,
-                "isAll" to true
-            )
-        return listOf(all) + albums.values
-    }
-
-    /**
-     * One page of the files that are not photos or videos.
-     *
-     * Scoped storage is the whole story here: from Android 11 (API 30) MediaStore only hands
-     * back non-visual rows this app itself created, so the answer carries `enumerable` to say
-     * whether a device-wide listing was even possible. Everything else is behind the system
-     * picker, by design of the OS.
-     */
-    fun fetchDocuments(
-        context: Context,
-        mimeTypes: List<String>,
-        offset: Int,
-        limit: Int
-    ): Map<String, Any?> {
-        val selection =
-            StringBuilder(
-                "${MediaStore.Files.FileColumns.MEDIA_TYPE} NOT IN (?, ?)" +
-                    " AND ${MediaStore.MediaColumns.SIZE} > 0" +
-                    " AND ${MediaStore.MediaColumns.DISPLAY_NAME} IS NOT NULL"
-            )
-        val args =
-            mutableListOf(
-                MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE.toString(),
-                MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO.toString()
-            )
-        // "image/*" is a pattern, not a value: SQL IN cannot match it, so wildcards
-        // become LIKE clauses and "*/*" drops the filter altogether.
-        if (mimeTypes.isNotEmpty() && !mimeTypes.contains(ANY_MIME_TYPE)) {
-            val exact = mimeTypes.filterNot { it.endsWith("/*") }
-            val patterns = mimeTypes.filter { it.endsWith("/*") }
-            val clauses = mutableListOf<String>()
-            if (exact.isNotEmpty()) {
-                val placeholders = exact.joinToString(",") { "?" }
-                clauses.add("${MediaStore.MediaColumns.MIME_TYPE} IN ($placeholders)")
-                args.addAll(exact)
-            }
-            for (pattern in patterns) {
-                clauses.add("${MediaStore.MediaColumns.MIME_TYPE} LIKE ?")
-                args.add(pattern.dropLast(1) + "%")
-            }
-            if (clauses.isNotEmpty()) {
-                selection.append(" AND (${clauses.joinToString(" OR ")})")
-            }
-        }
-        val selectionText = selection.toString()
-        val selectionArgs = args.toTypedArray()
-
-        val items = mutableListOf<Map<String, Any?>>()
-        var total = -1
-        query(
-            context.contentResolver,
-            DOCUMENT_PROJECTION,
-            selectionText,
-            selectionArgs,
-            limit,
-            offset
-        )?.use { cursor ->
-            total = reportedTotal(cursor)
-            while (cursor.moveToNext()) {
-                items.add(documentFrom(cursor))
-            }
-        }
-        if (total < 0) {
-            total = totalFor(context.contentResolver, selectionText, selectionArgs, offset)
-        }
-        return mapOf(
-            "items" to items,
-            "offset" to offset,
-            "total" to total,
-            "enumerable" to (Build.VERSION.SDK_INT < Build.VERSION_CODES.R)
-        )
-    }
-
-    /** A JPEG thumbnail for one asset, or null when the platform cannot make one. */
+    /** A JPEG thumbnail for [uri], or null when the platform cannot make one. */
     fun loadThumbnail(
         context: Context,
-        id: String,
+        uri: Uri,
         width: Int,
         height: Int,
         quality: Int
     ): ByteArray? {
-        val assetId = id.toLongOrNull() ?: return null
-        val thumbnail =
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                context.contentResolver.loadThumbnail(uriOf(assetId), Size(width, height), null)
-            } else {
-                legacyThumbnail(context.contentResolver, assetId, width, height)
-            } ?: return null
+        val file = fileOf(uri)
+        val decoded: Bitmap? =
+            when {
+                file != null -> fileThumbnail(file, width, height)
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ->
+                    context.contentResolver.loadThumbnail(uri, Size(width, height), null)
+                else -> legacyThumbnail(context.contentResolver, uri, width, height)
+            }
+        val thumbnail = decoded ?: return null
         // A hardware bitmap has no pixels this process can read, and compressing one fails
         // without saying so — the caller would get an empty array, which is a blank tile with
         // no error anywhere. Copy it into memory we own first.
@@ -251,27 +74,23 @@ internal object MediaStoreReader {
         return if (bytes == null || bytes.isEmpty()) null else bytes
     }
 
-    /** Copies a library asset into the app cache and returns the path. */
-    fun resolveFile(
-        context: Context,
-        id: String
-    ): String? {
-        val assetId = id.toLongOrNull() ?: return null
-        return copyToCache(context, uriOf(assetId))
-    }
-
     /**
-     * Copies a content URI into the app cache.
+     * Copies [uri] into the app cache and returns the path.
      *
-     * A SAF URI and a MediaStore URI are both handles, not paths, and the grant behind them can
-     * be revoked; the host app gets a file it owns instead.
+     * A content URI is a handle, not a path, and the grant behind it can be revoked; the
+     * host app gets a file it owns instead.
      */
     fun copyToCache(
         context: Context,
         uri: Uri
     ): String? {
-        val directory = File(context.cacheDir, "browse_files").apply { mkdirs() }
-        val name = displayNameOf(context.contentResolver, uri) ?: "file_${System.currentTimeMillis()}"
+        // A capture is already a file in the cache: hand it straight back.
+        fileOf(uri)?.let { return it.absolutePath }
+        val directory = cacheDirectory(context)
+        val name =
+            displayNameOf(context.contentResolver, uri)
+                ?: uri.lastPathSegment
+                ?: "file_${System.currentTimeMillis()}"
         val target = File(directory, safeName(name))
         val copied =
             context.contentResolver.openInputStream(uri)?.use { input ->
@@ -281,154 +100,201 @@ internal object MediaStoreReader {
         return if (copied) target.absolutePath else null
     }
 
-    private fun uriOf(assetId: Long): Uri = ContentUris.withAppendedId(COLLECTION, assetId)
-
-    private fun selectionFor(
-        types: Set<String>,
-        albumId: String?
-    ): Pair<String, Array<String>> {
-        val mediaTypes =
-            buildList {
-                if (types.contains("image")) add(MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE)
-                if (types.contains("video")) add(MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO)
-            }
-        val placeholders = mediaTypes.joinToString(",") { "?" }
-        val selection = StringBuilder("${MediaStore.Files.FileColumns.MEDIA_TYPE} IN ($placeholders)")
-        val args = mediaTypes.mapTo(mutableListOf()) { it.toString() }
-        if (albumId != null && albumId != ALL_ALBUM_ID) {
-            selection.append(" AND ${MediaStore.Files.FileColumns.BUCKET_ID} = ?")
-            args.add(albumId)
+    /** The metadata `MediaItem.fromMap` reads on the Dart side. */
+    fun describe(
+        context: Context,
+        uri: Uri
+    ): Map<String, Any?> {
+        fileOf(uri)?.let { file ->
+            return describeFile(file, isVideo = mimeTypeOf(file)?.startsWith("video/") == true)
         }
-        return selection.toString() to args.toTypedArray()
+        val (width, height) = dimensionsOf(context.contentResolver, uri)
+        val (sizeBytes, displayName) = statOf(context.contentResolver, uri)
+        val mimeType = context.contentResolver.getType(uri)
+        return mapOf(
+            "id" to uri.toString(),
+            "type" to mimeTypeVideo(mimeType),
+            "width" to width,
+            "height" to height,
+            "createdAtMs" to lastModifiedOf(context.contentResolver, uri),
+            "durationMs" to null,
+            "mimeType" to mimeType,
+            "name" to displayName,
+            "sizeBytes" to sizeBytes
+        )
     }
-
-    private fun query(
-        resolver: ContentResolver,
-        projection: Array<String>,
-        selection: String,
-        args: Array<String>,
-        limit: Int,
-        offset: Int
-    ): Cursor? =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            val bundle =
-                Bundle().apply {
-                    putString(ContentResolver.QUERY_ARG_SQL_SELECTION, selection)
-                    putStringArray(ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS, args)
-                    putString(ContentResolver.QUERY_ARG_SQL_SORT_ORDER, SORT)
-                    putInt(ContentResolver.QUERY_ARG_LIMIT, limit)
-                    putInt(ContentResolver.QUERY_ARG_OFFSET, offset)
-                }
-            resolver.query(COLLECTION, projection, bundle, null)
-        } else {
-            // The provider is SQLite-backed, so paging rides on the sort order below R.
-            resolver.query(COLLECTION, projection, selection, args, "$SORT LIMIT $limit OFFSET $offset")
-        }
-
-    /** The row count the provider volunteered, or -1 when it did not. */
-    private fun reportedTotal(cursor: Cursor): Int =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            cursor.extras?.getInt(ContentResolver.EXTRA_TOTAL_COUNT, -1) ?: -1
-        } else {
-            -1
-        }
 
     /**
-     * The row count for a selection: measured at the start of a browse, remembered for the
-     * pages after it.
+     * The metadata for a file in the cache — a camera capture — read off the file itself,
+     * since no provider knows it.
+     *
+     * A photo is measured with its EXIF orientation applied, and a video with its rotation,
+     * so portrait shots report portrait sizes.
      */
-    private fun totalFor(
-        resolver: ContentResolver,
-        selection: String,
-        args: Array<String>,
-        offset: Int
-    ): Int {
-        val key = args.joinToString(separator = "\u0000", prefix = "$selection\u0000")
-        if (offset > 0) {
-            totals[key]?.let { return it }
+    fun describeFile(
+        file: File,
+        isVideo: Boolean
+    ): Map<String, Any?> {
+        var width = 0
+        var height = 0
+        var durationMs: Long? = null
+        if (isVideo) {
+            val retriever = MediaMetadataRetriever()
+            try {
+                retriever.setDataSource(file.absolutePath)
+                width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
+                height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
+                durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
+                val rotation =
+                    retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
+                if (rotation == 90 || rotation == 270) width = height.also { height = width }
+            } catch (error: Exception) {
+                // Dimensions are cosmetic in a square grid; a clip we cannot read still attaches.
+            } finally {
+                retriever.release()
+            }
+        } else {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(file.absolutePath, bounds)
+            width = bounds.outWidth.coerceAtLeast(0)
+            height = bounds.outHeight.coerceAtLeast(0)
+            val orientation =
+                runCatching {
+                    ExifInterface(file.absolutePath)
+                        .getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+                }.getOrDefault(ExifInterface.ORIENTATION_NORMAL)
+            if (orientation == ExifInterface.ORIENTATION_ROTATE_90 ||
+                orientation == ExifInterface.ORIENTATION_ROTATE_270 ||
+                orientation == ExifInterface.ORIENTATION_TRANSPOSE ||
+                orientation == ExifInterface.ORIENTATION_TRANSVERSE
+            ) {
+                width = height.also { height = width }
+            }
         }
-        val total = count(resolver, selection, args)
-        totals[key] = total
-        return total
-    }
-
-    private fun count(
-        resolver: ContentResolver,
-        selection: String,
-        args: Array<String>
-    ): Int =
-        resolver
-            .query(COLLECTION, arrayOf(MediaStore.Files.FileColumns._ID), selection, args, null)
-            ?.use { it.count } ?: 0
-
-    private fun documentFrom(cursor: Cursor): Map<String, Any?> =
-        mapOf(
-            "id" to cursor.getLong(0).toString(),
-            "name" to cursor.getString(1),
-            "sizeBytes" to cursor.getLong(2),
-            "mimeType" to cursor.getString(3),
-            // DATE_MODIFIED is in seconds; the Dart model reads milliseconds.
-            "modifiedAtMs" to cursor.getLong(4) * 1000L,
-            // A MediaStore row is a handle, not a path: resolveFile copies it out.
-            "path" to null
-        )
-
-    private fun itemFrom(cursor: Cursor): Map<String, Any?> {
-        val isVideo =
-            cursor.getInt(1) == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO
-        val duration = if (cursor.isNull(5)) null else cursor.getLong(5)
         return mapOf(
-            "id" to cursor.getLong(0).toString(),
+            "id" to Uri.fromFile(file).toString(),
             "type" to if (isVideo) "video" else "image",
-            "width" to cursor.getInt(2),
-            "height" to cursor.getInt(3),
-            // DATE_MODIFIED is in seconds; the Dart model reads milliseconds.
-            "createdAtMs" to cursor.getLong(4) * 1000L,
-            "durationMs" to if (isVideo) duration else null,
-            "mimeType" to cursor.getString(6),
-            "name" to cursor.getString(7),
-            "sizeBytes" to cursor.getLong(8)
+            "width" to width,
+            "height" to height,
+            "createdAtMs" to file.lastModified(),
+            "durationMs" to durationMs,
+            "mimeType" to (mimeTypeOf(file) ?: if (isVideo) "video/mp4" else "image/jpeg"),
+            "name" to file.name,
+            "sizeBytes" to file.length()
         )
     }
 
-    @Suppress("DEPRECATION")
-    private fun legacyThumbnail(
-        resolver: ContentResolver,
-        assetId: Long,
+    private fun mimeTypeOf(file: File): String? =
+        android.webkit.MimeTypeMap.getSingleton()
+            .getMimeTypeFromExtension(file.extension.lowercase())
+
+    /**
+     * A thumbnail for a file in the cache, which no provider will make for us.
+     *
+     * API 29+ has `ThumbnailUtils` do it — orientation applied, centre-cropped; below that a
+     * photo is decoded with a sample size that lands near the tile and a clip gives up its
+     * first frame.
+     */
+    private fun fileThumbnail(
+        file: File,
         width: Int,
         height: Int
     ): Bitmap? {
-        val kind =
-            if (width <= 96 && height <= 96) {
-                MediaStore.Images.Thumbnails.MICRO_KIND
+        val isVideo = mimeTypeOf(file)?.startsWith("video/") == true
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                if (isVideo) {
+                    ThumbnailUtils.createVideoThumbnail(file, Size(width, height), null)
+                } else {
+                    ThumbnailUtils.createImageThumbnail(file, Size(width, height), null)
+                }
+            } else if (isVideo) {
+                val retriever = MediaMetadataRetriever()
+                try {
+                    retriever.setDataSource(file.absolutePath)
+                    retriever.frameAtTime?.let { ThumbnailUtils.extractThumbnail(it, width, height, ThumbnailUtils.OPTIONS_RECYCLE_INPUT) }
+                } finally {
+                    retriever.release()
+                }
             } else {
-                MediaStore.Images.Thumbnails.MINI_KIND
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeFile(file.absolutePath, bounds)
+                var sample = 1
+                while (bounds.outWidth / (sample * 2) >= width && bounds.outHeight / (sample * 2) >= height) {
+                    sample *= 2
+                }
+                val options = BitmapFactory.Options().apply { inSampleSize = sample }
+                BitmapFactory.decodeFile(file.absolutePath, options)?.let {
+                    ThumbnailUtils.extractThumbnail(it, width, height, ThumbnailUtils.OPTIONS_RECYCLE_INPUT)
+                }
             }
-        val isVideo =
-            resolver
-                .query(
-                    COLLECTION,
-                    arrayOf(MediaStore.Files.FileColumns.MEDIA_TYPE),
-                    "${MediaStore.Files.FileColumns._ID} = ?",
-                    arrayOf(assetId.toString()),
-                    null
-                )?.use { cursor ->
-                    cursor.moveToFirst() &&
-                        cursor.getInt(0) == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO
-                } ?: false
-        return if (isVideo) {
-            MediaStore.Video.Thumbnails.getThumbnail(resolver, assetId, kind, null)
-        } else {
-            MediaStore.Images.Thumbnails.getThumbnail(resolver, assetId, kind, null)
+        } catch (error: Exception) {
+            null
         }
     }
+
+    private fun mimeTypeVideo(mimeType: String?): String =
+        if (mimeType != null && mimeType.startsWith("video/")) "video" else "image"
+
+    private val DIMENSIONS_PROJECTION =
+        arrayOf(android.provider.MediaStore.MediaColumns.WIDTH, android.provider.MediaStore.MediaColumns.HEIGHT)
+
+    private fun dimensionsOf(resolver: ContentResolver, uri: Uri): Pair<Int, Int> =
+        resolver.query(uri, DIMENSIONS_PROJECTION, null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) cursor.getInt(0) to cursor.getInt(1) else 0 to 0
+        } ?: (0 to 0)
+
+    private val STAT_PROJECTION =
+        arrayOf(OpenableColumns.SIZE, OpenableColumns.DISPLAY_NAME)
+
+    private fun statOf(resolver: ContentResolver, uri: Uri): Pair<Long?, String?> =
+        resolver.query(uri, STAT_PROJECTION, null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val size = if (cursor.isNull(0)) null else cursor.getLong(0)
+                val name = if (cursor.isNull(1)) null else cursor.getString(1)
+                size to name
+            } else {
+                null to null
+            }
+        } ?: (null to null)
+
+    private val DATE_PROJECTION =
+        arrayOf(android.provider.MediaStore.MediaColumns.DATE_MODIFIED)
+
+    private fun lastModifiedOf(resolver: ContentResolver, uri: Uri): Long =
+        resolver.query(uri, DATE_PROJECTION, null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getLong(0) * 1000L else 0L
+        } ?: 0L
+
+    /**
+     * Best-effort fallback for `loadThumbnail` below API 29, where
+     * [ContentResolver.loadThumbnail] does not exist.
+     *
+     * Decodes the URI to a bitmap directly. Returns null on any failure rather than
+     * surfacing it — the tile then shows the "no thumbnail" glyph and the caller can
+     * still resolve the file.
+     */
+    @Suppress("DEPRECATION")
+    private fun legacyThumbnail(
+        resolver: ContentResolver,
+        uri: Uri,
+        width: Int,
+        height: Int
+    ): Bitmap? =
+        try {
+            resolver.openInputStream(uri)?.use { input ->
+                android.graphics.BitmapFactory.decodeStream(input, null, null)
+            }
+        } catch (error: Exception) {
+            null
+        }
 
     private fun displayNameOf(
         resolver: ContentResolver,
         uri: Uri
     ): String? =
         resolver
-            .query(uri, arrayOf(MediaStore.MediaColumns.DISPLAY_NAME), null, null, null)
+            .query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
             ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
 
     /** Keeps a provider-supplied name from escaping the cache directory. */

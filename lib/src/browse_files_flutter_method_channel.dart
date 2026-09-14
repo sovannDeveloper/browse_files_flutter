@@ -3,10 +3,7 @@ import 'package:flutter/services.dart';
 
 import 'browse_files_flutter_platform_interface.dart';
 import 'models/browse_files_exception.dart';
-import 'models/document_page.dart';
-import 'models/media_album.dart';
-import 'models/media_page.dart';
-import 'models/media_permission.dart';
+import 'models/media_item.dart';
 import 'models/media_type.dart';
 
 /// The default [OCBrowseFilesFlutterPlatform], talking to Android and iOS over a
@@ -22,88 +19,22 @@ class OCMethodChannelBrowseFilesFlutter extends OCBrowseFilesFlutterPlatform {
   );
 
   @override
-  Future<OCMediaPermissionStatus> permissionStatus({
+  Future<List<OCMediaItem>> pickMedia({
     Set<OCMediaType> types = kAllMediaTypes,
+    bool allowMultiple = true,
   }) async {
     final names = _typeNames(types);
     return _guard(() async {
-      final name = await methodChannel.invokeMethod<String>(
-        'permissionStatus',
-        {'types': names},
-      );
-      return OCMediaPermissionStatus.fromName(name);
-    });
-  }
-
-  @override
-  Future<OCMediaPermissionStatus> requestPermission({
-    Set<OCMediaType> types = kAllMediaTypes,
-  }) async {
-    final names = _typeNames(types);
-    return _guard(() async {
-      final name = await methodChannel.invokeMethod<String>(
-        'requestPermission',
-        {'types': names},
-      );
-      return OCMediaPermissionStatus.fromName(name);
-    });
-  }
-
-  @override
-  Future<bool> openSettings() async {
-    return _guard(
-      () async =>
-          await methodChannel.invokeMethod<bool>('openSettings') ?? false,
-    );
-  }
-
-  @override
-  Future<OCMediaPermissionStatus> presentLimitedPicker() async {
-    return _guard(() async {
-      final name = await methodChannel.invokeMethod<String>(
-        'presentLimitedPicker',
-      );
-      return OCMediaPermissionStatus.fromName(name);
-    });
-  }
-
-  @override
-  Future<List<OCMediaAlbum>> fetchAlbums({
-    Set<OCMediaType> types = kAllMediaTypes,
-  }) async {
-    final names = _typeNames(types);
-    return _guard(() async {
-      final albums = await methodChannel.invokeListMethod<Object?>(
-        'fetchAlbums',
-        {'types': names},
-      );
-      return (albums ?? const [])
+      final raw =
+          await methodChannel.invokeListMethod<Object?>(
+            'pickMedia',
+            <String, Object?>{'types': names, 'allowMultiple': allowMultiple},
+          ) ??
+          const <Object?>[];
+      return raw
           .cast<Map<Object?, Object?>>()
-          .map(OCMediaAlbum.fromMap)
+          .map(OCMediaItem.fromMap)
           .toList(growable: false);
-    });
-  }
-
-  @override
-  Future<OCMediaPage> fetchMedia({
-    String? albumId,
-    Set<OCMediaType> types = kAllMediaTypes,
-    int offset = 0,
-    int limit = 50,
-  }) async {
-    if (offset < 0) {
-      throw ArgumentError.value(offset, 'offset', 'must not be negative');
-    }
-    if (limit <= 0) {
-      throw ArgumentError.value(limit, 'limit', 'must be positive');
-    }
-    final names = _typeNames(types);
-    return _guard(() async {
-      final page = await methodChannel.invokeMapMethod<Object?, Object?>(
-        'fetchMedia',
-        {'albumId': albumId, 'types': names, 'offset': offset, 'limit': limit},
-      );
-      return page == null ? OCMediaPage.empty : OCMediaPage.fromMap(page);
     });
   }
 
@@ -146,27 +77,6 @@ class OCMethodChannelBrowseFilesFlutter extends OCBrowseFilesFlutterPlatform {
   }
 
   @override
-  Future<OCDocumentPage> fetchDocuments({
-    List<String> mimeTypes = const [],
-    int offset = 0,
-    int limit = 50,
-  }) async {
-    if (offset < 0) {
-      throw ArgumentError.value(offset, 'offset', 'must not be negative');
-    }
-    if (limit <= 0) {
-      throw ArgumentError.value(limit, 'limit', 'must be positive');
-    }
-    return _guard(() async {
-      final page = await methodChannel.invokeMapMethod<Object?, Object?>(
-        'fetchDocuments',
-        {'mimeTypes': mimeTypes, 'offset': offset, 'limit': limit},
-      );
-      return page == null ? OCDocumentPage.empty : OCDocumentPage.fromMap(page);
-    });
-  }
-
-  @override
   Future<List<String>> pickDocuments({
     List<String> mimeTypes = const [],
     bool allowMultiple = true,
@@ -177,6 +87,20 @@ class OCMethodChannelBrowseFilesFlutter extends OCBrowseFilesFlutterPlatform {
         {'mimeTypes': mimeTypes, 'allowMultiple': allowMultiple},
       );
       return paths ?? const <String>[];
+    });
+  }
+
+  @override
+  Future<OCMediaItem?> captureMedia({
+    OCMediaType type = OCMediaType.image,
+  }) async {
+    return _guard(() async {
+      final raw = await methodChannel.invokeMapMethod<Object?, Object?>(
+        'captureMedia',
+        <String, Object?>{'type': type.name},
+      );
+      // A null reply is the user backing out of the camera, not a failure.
+      return raw == null ? null : OCMediaItem.fromMap(raw);
     });
   }
 

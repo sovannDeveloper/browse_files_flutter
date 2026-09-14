@@ -13,22 +13,27 @@ import 'package:integration_test/integration_test.dart';
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('permissionStatus reaches the host platform', (
+  testWidgets('pickMedia reaches the host platform', (
     WidgetTester tester,
   ) async {
-    // The native side is a stub, so the only thing worth asserting today is
-    // that the call is routed and comes back as a typed exception rather than
-    // a raw MissingPluginException. Tighten this to a real status once
-    // permissionStatus is implemented on both platforms.
-    await expectLater(
-      OCBrowseFilesFlutter.instance.permissionStatus(),
-      throwsA(
-        isA<OCBrowseFilesException>().having(
-          (error) => error.code,
-          'code',
+    // The native side on Android is implemented and on iOS is still a stub.
+    // Tighten this to a real `OCMediaItem` once iOS picks up the Photo Picker
+    // flow too; until then the only thing worth asserting is that the call is
+    // routed and comes back as a typed exception rather than a raw
+    // MissingPluginException.
+    try {
+      final items = await OCBrowseFilesFlutter.instance.pickMedia();
+      // Android returns the picked list (possibly empty) and reports nothing
+      // as a typed empty list, so reaching here means the call routed.
+      expect(items, isA<List<OCMediaItem>>());
+    } on OCBrowseFilesException catch (error) {
+      expect(
+        error.code,
+        isIn(<OCBrowseFilesErrorCode>[
           OCBrowseFilesErrorCode.unimplemented,
-        ),
-      ),
-    );
+          OCBrowseFilesErrorCode.unsupported,
+        ]),
+      );
+    }
   });
 }

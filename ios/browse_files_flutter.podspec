@@ -4,17 +4,19 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'browse_files_flutter'
-  s.version          = '0.0.1'
-  s.summary          = 'A new Flutter plugin project.'
+  s.version          = '0.1.0'
+  s.summary          = 'A Telegram-style attachment sheet: system pickers and camera, no library permission.'
   s.description      = <<-DESC
-A new Flutter plugin project.
+Photos, videos, documents and camera captures through the system pickers, copied into the app
+cache. No photo library permission is requested.
                        DESC
-  s.homepage         = 'http://example.com'
+  s.homepage         = 'https://github.com/kedtec/browse_files_flutter'
   s.license          = { :file => '../LICENSE' }
-  s.author           = { 'Your Company' => 'email@example.com' }
+  s.author           = { 'KEDTEC' => 'dev@kedtec.com' }
   s.source           = { :path => '.' }
   s.source_files = 'Classes/**/*'
   s.dependency 'Flutter'
+  s.frameworks = 'AVFoundation', 'ImageIO', 'PhotosUI', 'UniformTypeIdentifiers'
   s.platform = :ios, '13.0'
 
   # Flutter.framework does not contain a i386 slice.

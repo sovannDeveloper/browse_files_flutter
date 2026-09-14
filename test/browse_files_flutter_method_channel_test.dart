@@ -24,61 +24,66 @@ void main() {
         .setMockMethodCallHandler(channel, null);
   });
 
-  test(
-    'permissionStatus sends the type filter and decodes the answer',
-    () async {
-      answerWith((_) async => 'limited');
-
-      expect(
-        await platform.permissionStatus(types: const {OCMediaType.image}),
-        OCMediaPermissionStatus.limited,
-      );
-      expect(calls.single.method, 'permissionStatus');
-      expect(calls.single.arguments, {
-        'types': ['image'],
-      });
-    },
-  );
-
-  test('fetchMedia decodes a page', () async {
+  test('pickMedia sends the type filter and decodes the answer', () async {
     answerWith(
-      (_) async => {
-        'items': [
-          {
-            'id': '1',
-            'type': 'video',
-            'width': 4,
-            'height': 3,
-            'createdAtMs': 10,
-            'durationMs': 1000,
-          },
-        ],
-        'offset': 0,
-        'total': 3,
-      },
-    );
-
-    final page = await platform.fetchMedia(albumId: 'camera', limit: 1);
-
-    expect(page.items.single.id, '1');
-    expect(page.items.single.duration, const Duration(seconds: 1));
-    expect(page.hasMore, isTrue);
-    expect(calls.single.arguments['albumId'], 'camera');
-    expect(calls.single.arguments['limit'], 1);
-  });
-
-  test('fetchAlbums decodes a list', () async {
-    answerWith(
-      (_) async => [
-        {'id': 'all', 'name': 'All media', 'count': 3, 'isAll': true},
-        {'id': 'cam', 'name': 'Camera', 'count': 2},
+      (_) async => <Map<Object?, Object?>>[
+        {
+          'id': 'content://media/picker/0/1',
+          'type': 'image',
+          'width': 1080,
+          'height': 1920,
+          'createdAtMs': 1700000000000,
+        },
+        {
+          'id': 'content://media/picker/0/2',
+          'type': 'video',
+          'width': 1920,
+          'height': 1080,
+          'createdAtMs': 1700000001000,
+          'durationMs': 5567000,
+        },
       ],
     );
 
-    final albums = await platform.fetchAlbums();
+    final items = await platform.pickMedia(
+      types: const {OCMediaType.image},
+      allowMultiple: false,
+    );
 
-    expect(albums.map((album) => album.id), ['all', 'cam']);
-    expect(albums.first.isAll, isTrue);
+    expect(items, hasLength(2));
+    expect(items.first.id, 'content://media/picker/0/1');
+    expect(items.last.isVideo, isTrue);
+    expect(items.last.duration, const Duration(milliseconds: 5567000));
+    expect(calls.single.method, 'pickMedia');
+    expect(calls.single.arguments, {
+      'types': ['image'],
+      'allowMultiple': false,
+    });
+  });
+
+  test('pickMedia defaults to both media types and multi-select', () async {
+    answerWith((_) async => <Object?>[]);
+
+    await platform.pickMedia();
+
+    expect(calls.single.arguments, {
+      'types': ['image', 'video'],
+      'allowMultiple': true,
+    });
+  });
+
+  test('pickMedia with no types is rejected before reaching the channel', () {
+    expect(
+      () => platform.pickMedia(types: const <OCMediaType>{}),
+      throwsArgumentError,
+    );
+    expect(calls, isEmpty);
+  });
+
+  test('pickMedia returns an empty list when nothing was chosen', () async {
+    answerWith((_) async => null);
+
+    expect(await platform.pickMedia(), isEmpty);
   });
 
   test('pickDocuments returns an empty list when nothing was chosen', () async {
@@ -102,6 +107,14 @@ void main() {
     );
   });
 
+  test('loadThumbnail bad dimensions are rejected before the channel', () {
+    expect(
+      () => platform.loadThumbnail('1', width: 0, height: 10),
+      throwsArgumentError,
+    );
+    expect(calls, isEmpty);
+  });
+
   test('a platform error keeps its code', () async {
     answerWith(
       (_) async => throw PlatformException(
@@ -112,7 +125,7 @@ void main() {
     );
 
     expect(
-      platform.fetchAlbums(),
+      platform.pickMedia(),
       throwsA(
         isA<OCBrowseFilesException>()
             .having(
@@ -130,7 +143,7 @@ void main() {
     answerWith((_) async => throw PlatformException(code: 'weird'));
 
     expect(
-      platform.openSettings(),
+      platform.pickMedia(),
       throwsA(
         isA<OCBrowseFilesException>().having(
           (error) => error.code,
@@ -142,10 +155,8 @@ void main() {
   });
 
   test('a missing native implementation surfaces as unimplemented', () async {
-    // No mock handler registered: the channel reports the method as missing,
-    // which is exactly what the stub native side does today.
     expect(
-      platform.permissionStatus(),
+      platform.pickMedia(),
       throwsA(
         isA<OCBrowseFilesException>().having(
           (error) => error.code,
@@ -156,14 +167,51 @@ void main() {
     );
   });
 
-  test('bad paging arguments are rejected before reaching the channel', () {
-    expect(() => platform.fetchMedia(limit: 0), throwsArgumentError);
-    expect(() => platform.fetchMedia(offset: -1), throwsArgumentError);
-    expect(
-      () => platform.loadThumbnail('1', width: 0, height: 10),
-      throwsArgumentError,
+  test('captureMedia sends the kind and decodes the capture', () async {
+    answerWith(
+      (_) async => <Object?, Object?>{
+        'id': 'file:///cache/browse_files/capture_1.mp4',
+        'type': 'video',
+        'width': 1920,
+        'height': 1080,
+        'createdAtMs': 1700000002000,
+        'durationMs': 4000,
+        'mimeType': 'video/mp4',
+      },
     );
-    expect(() => platform.fetchAlbums(types: const {}), throwsArgumentError);
-    expect(calls, isEmpty);
+
+    final item = await platform.captureMedia(type: OCMediaType.video);
+
+    expect(item?.isVideo, isTrue);
+    expect(item?.duration, const Duration(seconds: 4));
+    expect(calls.single.method, 'captureMedia');
+    expect(calls.single.arguments, {'type': 'video'});
+  });
+
+  test('captureMedia defaults to a photo and null means backed out', () async {
+    answerWith((_) async => null);
+
+    expect(await platform.captureMedia(), isNull);
+    expect(calls.single.arguments, {'type': 'image'});
+  });
+
+  test('captureMedia wraps platform errors', () async {
+    answerWith(
+      (_) async => throw PlatformException(
+        code: 'unsupported',
+        message: 'This device has no camera.',
+      ),
+    );
+
+    expect(
+      () => platform.captureMedia(),
+      throwsA(
+        isA<OCBrowseFilesException>().having(
+          (error) => error.code,
+          'code',
+          OCBrowseFilesErrorCode.unsupported,
+        ),
+      ),
+    );
   });
 }

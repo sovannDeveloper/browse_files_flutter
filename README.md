@@ -1,10 +1,13 @@
 # browse_files_flutter
 
-A Telegram-style attachment bottom sheet for Flutter — browse the device's photos, videos and
-documents in a draggable sheet with ordered multi-selection.
+A Telegram-style attachment sheet for Flutter: **select photos & videos**, **select files** or
+**take a photo / record a video**, from a short menu or from a draggable sheet with ordered
+multi-selection.
 
-Enumeration is native and paged (Android `MediaStore`, iOS `PHAsset`), with per-tile thumbnails
-and no third-party gallery dependency.
+Everything goes through the system UIs — the Photo Picker / `PHPickerViewController`, the
+Storage Access Framework / `UIDocumentPickerViewController`, and the system camera app — so the
+plugin declares **no** `READ_MEDIA_*`, `READ_EXTERNAL_STORAGE` or `CAMERA` permission and needs no
+photo library access on iOS. No third-party gallery or picker dependency.
 
 Every public name is prefixed `OC`.
 
@@ -21,62 +24,74 @@ dependencies:
 
 ## Platform setup
 
-**Android** — declare the media permissions in `android/app/src/main/AndroidManifest.xml`:
+**Android** — nothing. The `<queries>` entries and the `FileProvider` the camera writes through
+are declared in the plugin's manifest and merged into the app's. Do not add `CAMERA` to the
+manifest: once it is declared, the camera intent starts requiring it.
+
+**iOS** — the camera needs purpose strings in `ios/Runner/Info.plist`; without them iOS kills the
+app when the camera opens (the plugin checks for them and fails with `unsupported` instead):
 
 ```xml
-<uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
-<uses-permission android:name="android.permission.READ_MEDIA_VIDEO"/>
-<!-- Android 14+: the partial grant reported as OCMediaPermissionStatus.limited -->
-<uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED"/>
-<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
-    android:maxSdkVersion="32"/>
+<key>NSCameraUsageDescription</key>
+<string>Opens the camera so you can take a photo or video to attach.</string>
+<!-- only if you record video -->
+<key>NSMicrophoneUsageDescription</key>
+<string>Records sound with the videos you attach.</string>
 ```
 
-**iOS** — add a purpose string to `ios/Runner/Info.plist`; without it the prompt crashes the app:
-
-```xml
-<key>NSPhotoLibraryUsageDescription</key>
-<string>Browses your photos and videos so you can attach them.</string>
-```
+No `NSPhotoLibraryUsageDescription` is needed: the picker runs out of process.
 
 ## Usage
 
-### The sheet
+All three entry points hand back the same `OCBrowseFilesResult` — `media` (photos and videos) and
+`documents` (cached file paths) — and `null` when the user dismissed the UI.
 
-One call, one result. `show` resolves to `null` when the user dismisses the sheet — by tapping the
-scrim, dragging it down or pressing back.
+### The menu
+
+Four rows — take photo · record video · select photos & videos · select files. The menu closes
+before the camera or picker opens:
 
 ```dart
 import 'package:browse_files_flutter/browse_files_flutter.dart';
 
-final result = await OCBrowseFiles.show(context);
+final result = await OCBrowseFiles.showActions(context);
 if (result != null && result.isNotEmpty) {
-  // Media are descriptions, not files: resolve the ones you actually need.
   for (final item in result.media) {
     final path = await OCBrowseFilesFlutter.instance.resolveFile(item.id);
-    // ... upload or read `path`
   }
-  // Documents were picked *as* files and are already cached paths.
   for (final path in result.documents) {
-    // ... upload or read `path`
+    // already a cached file
   }
 }
 ```
 
-`OCBrowseFiles.show` needs a context **below** a `Navigator`. A `State` that builds `MaterialApp`
-itself sits above the one it creates — call from a widget inside `MaterialApp`, or wrap the call
-site in a `Builder`.
+`result` is `OCBrowseFilesResult.empty` when the user opened the camera or a picker and backed
+out, and `null` when they dismissed the menu. Pick the rows with `actions:`; by default the camera
+rows follow `OCBrowseFilesOptions.types`. A platform failure is thrown as `OCBrowseFilesException`
+— there is no sheet left to show it in.
+
+### The sheet
+
+The Telegram layout: a draggable sheet with a camera cell, a 3-column grid of what has been
+picked so far with numbered selection, and the Gallery · File tab row. The camera cell opens the
+system camera (asking photo or video first when both are allowed) and the shot lands in the
+selection.
+
+```dart
+final result = await OCBrowseFiles.show(context);
+```
+
+Both calls need a context **below** a `Navigator`. A `State` that builds `MaterialApp` itself sits
+above the one it creates — call from a widget inside `MaterialApp`, or wrap the call site in a
+`Builder`.
 
 ### The full-screen browser
 
-Same result, for browsing rather than grabbing the last photo taken. Photos and videos live in one
-tab, every other file in the next, with one selection cap across both:
+Same result, for browsing rather than grabbing the last photo taken:
 
 ```dart
 final result = await OCBrowseFiles.showPage(context, title: 'Attach');
 ```
-
-`title` defaults to `OCBrowseFilesStrings.pageTitle`.
 
 ### Options
 
@@ -86,19 +101,20 @@ Every option has a Telegram-shaped default:
 await OCBrowseFiles.show(
   context,
   options: OCBrowseFilesOptions(
-    types: {OCMediaType.image, OCMediaType.video},
-    maxSelection: 10,          // taps past the cap are refused
+    types: {OCMediaType.image, OCMediaType.video},  // what the picker and camera offer
+    maxSelection: 10,          // taps past the cap are refused; counts media + documents
+    allowMultipleMedia: true,
     crossAxisCount: 3,         // grid columns
-    pageSize: 50,              // items per platform request, not per library
     thumbnailSize: 256,        // square, in pixels; also the cache key
     peekSize: 0.55,            // fraction of the screen before the sheet is dragged up
-    strings: const OCBrowseFilesStrings(),  // every word the sheet draws — see below
-    confirmLabel: 'Select',    // shortcut for strings.confirmLabel; the count is appended
+    strings: const OCBrowseFilesStrings(),  // every word the sheet draws
+    confirmLabel: 'Send',      // shortcut for strings.confirmLabel; the count is appended
     documentMimeTypes: ['application/pdf', 'image/*'],
     allowMultipleDocuments: true,
+    showCamera: true,          // false hides the camera cell and the camera menu rows
+    onCameraTap: null,         // set it to replace the built-in camera with your own
     backgroundColor: Colors.black,  // recolours the sheet chrome, not the app theme
     accentColor: Colors.blue,
-    onCameraTap: _openCamera,  // the camera cell appears only when this is supplied
   ),
 );
 ```
@@ -132,147 +148,55 @@ An empty `tabs` list leaves the sheet on the gallery with no tab row.
 
 ### Text and localisation
 
-Every string the sheet draws lives in `OCBrowseFilesStrings`. Pass one to
-`OCBrowseFilesOptions.strings` and override only what you want; anything left out keeps the
-English default:
+Every string lives in `OCBrowseFilesStrings`. Pass one to `OCBrowseFilesOptions.strings` and
+override only what you want:
 
 ```dart
-await OCBrowseFiles.show(
-  context,
-  options: OCBrowseFilesOptions(
-    strings: OCBrowseFilesStrings(
-      confirmLabel: 'Envoyer',
-      permissionTitle: 'Autoriser l\'accès à vos photos',
-      permissionAllowLabel: 'Autoriser',
-      storagePickerTitle: 'Stockage interne',
-      noRecentFiles: 'Aucun fichier récent.',
-      // The text with numbers in it is built, so a translation can reorder it.
-      albumItemCount: (count) => '$count éléments',
-      confirmButton: (label, count) => '$label · $count',
-      selectionSummary: (media, documents, max) =>
-          '$media photos, $documents fichiers (max $max)',
-    ),
-  ),
-);
-```
-
-There is no `AppLocalizations` dependency and no lookup by locale: build the strings from whatever
-your app already uses, then rebuild the sheet's options when the locale changes.
-
-What each group covers:
-
-| Fields | Where they show |
-| --- | --- |
-| `pageTitle`, `mediaTabLabel`, `documentTabLabel` | the full-screen browser's app bar and its two tabs |
-| `confirmLabel`, `confirmButton`, `selectionSummary` | the confirm bar, once something is selected |
-| `albumMenuTooltip`, `albumItemCount` | the gallery's album selector |
-| `limitedAccessMessage`, `selectMoreLabel` | the banner shown on a partial grant |
-| `permissionTitle`, `permissionDetail`, `permissionAllowLabel` | the panel that asks for access |
-| `permissionDeniedTitle`, `permissionDeniedDetail`, `openSettingsLabel` | the panel shown once only Settings can undo it |
-| `galleryErrorTitle`, `retryLabel` | a page of the library that failed to load — the platform's own message is shown untouched under the title |
-| `galleryEmptyTitle`, `galleryEmptyDetail` | a library holding nothing of the requested types |
-| `storagePickerTitle`, `storagePickerSubtitle` | the Files tab's row that opens the system picker |
-| `recentFilesTitle`, `recentFilesOnlyDetail`, `noRecentFiles`, `unknownFileType` | the rest of the Files tab |
-
-The bottom row's captions belong to the tabs rather than to the strings. `withLabel` renames one
-without touching its `id`, so a relabelled built-in tab still gets its body from this package:
-
-```dart
-options: OCBrowseFilesOptions(
-  tabs: [
-    OCAttachmentTab.gallery.withLabel('Galerie'),
-    OCAttachmentTab.file.withLabel('Fichier'),
-  ],
+strings: OCBrowseFilesStrings(
+  confirmLabel: 'Envoyer',
+  takePhotoLabel: 'Prendre une photo',
+  recordVideoLabel: 'Filmer',
+  selectMediaLabel: 'Photos et vidéos',
+  selectFilesLabel: 'Fichiers',
+  confirmButton: (label, count) => '$label · $count',
 ),
 ```
 
-Sizes and dates in the file list (`1.2 MB`, `2 Jan 2026`) are formatted without a date package and
-are not translatable yet.
+The bottom row's captions belong to the tabs: `OCAttachmentTab.gallery.withLabel('Galerie')`
+renames one without touching its `id`.
 
-### Permissions
-
-Photo access is not a yes/no on either platform. `OCMediaPermissionStatus.limited` is a **grant**,
-not a refusal — the user shared a subset of their library, and the sheet renders that subset with
-an affordance to widen it. The sheet handles this itself; check it directly only if you gate the
-sheet behind your own UI:
+## The API underneath
 
 ```dart
 final api = OCBrowseFilesFlutter.instance;
 
-var status = await api.permissionStatus();
-if (status == OCMediaPermissionStatus.notDetermined) {
-  status = await api.requestPermission();
-}
+final picked = await api.pickMedia(types: {OCMediaType.image});     // system picker
+final shot = await api.captureMedia(type: OCMediaType.video);       // null = backed out
+final docs = await api.pickDocuments(mimeTypes: ['application/pdf']); // cached paths
 
-if (status.canBrowse) {          // true for granted *and* limited
-  if (status == OCMediaPermissionStatus.limited) {
-    await api.presentLimitedPicker();   // let the user share more
-  }
-} else if (status.needsSettings) {      // permanentlyDenied or restricted
-  await api.openSettings();             // prompting again would do nothing
-}
+final jpeg = await api.loadThumbnail(picked.first.id, width: 256, height: 256);
+final path = await api.resolveFile(picked.first.id);
 ```
 
-### Using the API without the sheet
-
-The platform calls are public, so you can build your own grid:
-
-```dart
-final api = OCBrowseFilesFlutter.instance;
-
-final albums = await api.fetchAlbums();          // synthetic "all media" album first
-final page = await api.fetchMedia(               // newest first
-  albumId: albums.first.id,                      // that album's id, or null, means everything
-  offset: 0,
-  limit: 50,
-);
-
-for (final item in page.items) {
-  final jpeg = await api.loadThumbnail(item.id, width: 256, height: 256);
-  // item.id is a MediaStore id / PHAsset localIdentifier — never a file path.
-}
-```
-
-Prefer `OCThumbnailCache` over calling `loadThumbnail` per rebuild: it is a bounded LRU keyed by
-asset id plus requested size, and it de-duplicates in-flight requests.
-
-```dart
-final cache = OCThumbnailCache(capacity: 256);   // or OCThumbnailCache.shared
-cache.prefetch(page.items.map((i) => i.id), width: 256, height: 256);
-final bytes = await cache.load(id, width: 256, height: 256);  // null = no thumbnail exists
-```
-
-Documents follow the same shape, with one caveat: the OS decides what may be listed at all.
-`OCDocumentPage.enumerable` is `false` on iOS and on Android 11+, where scoped storage keeps
-everything but this app's own files behind the system picker — so fall back to the picker rather
-than showing an empty list:
-
-```dart
-final page = await api.fetchDocuments(mimeTypes: ['application/pdf']);
-final paths = page.enumerable
-    ? <String>[]
-    : await api.pickDocuments(mimeTypes: ['application/pdf'], allowMultiple: true);
-```
-
-`pickDocuments` returns paths already copied into the app cache — a SAF URI and an iOS
-security-scoped URL cannot be handed to the host app as they are — and an empty list if the user
-dismissed the picker.
+An `OCMediaItem.id` is opaque: a content URI from the Photo Picker or a `file://` capture on
+Android, a cached path on iOS. Hand it to `loadThumbnail` for a tile and to `resolveFile` for a
+file the app owns; captures and iOS picks are already files, so `resolveFile` returns at once.
+`OCThumbnailCache` is a bounded LRU keyed by id plus size that de-duplicates in-flight requests —
+prefer it over calling `loadThumbnail` per rebuild.
 
 ### Errors
 
-Every call throws `OCBrowseFilesException` and nothing else; a raw `PlatformException` or
-`MissingPluginException` never reaches the caller.
+Every call throws `OCBrowseFilesException` and nothing else:
 
 ```dart
 try {
-  final path = await api.resolveFile(item.id);
+  final shot = await api.captureMedia();
 } on OCBrowseFilesException catch (e) {
-  if (e.isCancellation) return;               // a dismissed picker is a normal outcome
   switch (e.code) {
-    case OCBrowseFilesErrorCode.permissionDenied:
-    case OCBrowseFilesErrorCode.notFound:     // deleted, or on an unmounted volume
+    case OCBrowseFilesErrorCode.permissionDenied: // camera refused (iOS) — Settings can undo it
+    case OCBrowseFilesErrorCode.unsupported:      // no camera, or a missing Info.plist string
+    case OCBrowseFilesErrorCode.notFound:
     case OCBrowseFilesErrorCode.ioError:
-    case OCBrowseFilesErrorCode.unsupported:  // the OS predates the API involved
     default:
       // e.message and e.details are for logs
   }
@@ -281,10 +205,8 @@ try {
 
 ## Out of scope
 
-- **The live camera preview tile.** The camera cell appears only when `onCameraTap` is supplied,
-  and the host app opens whatever camera it already uses. The example app shows one way to do it:
-  its own channel onto `ACTION_IMAGE_CAPTURE` / `UIImagePickerController`, saving the shot into the
-  library so it comes back as an ordinary asset id.
+- **A live camera preview tile.** The camera cell opens the system camera app; a host app with
+  its own camera passes `onCameraTap`.
 - **Location, Article, Poll and Contact tabs.** Presets exist for the label and icon; the body is
   the host app's.
 
@@ -294,11 +216,8 @@ try {
 flutter pub get
 flutter analyze
 flutter test
-cd example && flutter run   # required to verify the grid, permissions and thumbnails
+cd example && flutter run   # the pickers and the camera only exist on a device
 ```
-
-The grid, permissions and thumbnails cannot be verified in a simulator with an empty media
-library — run the example on a device with real photos.
 
 ## License
 

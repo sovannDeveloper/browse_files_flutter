@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:browse_files_flutter/browse_files_flutter.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -9,56 +11,31 @@ class FakeBrowseFilesPlatform
     implements OCBrowseFilesFlutterPlatform {
   final calls = <String, Object?>{};
 
+  /// The items `pickMedia` returns; defaults to two images.
+  List<OCMediaItem> picked = <OCMediaItem>[
+    OCMediaItem(
+      id: 'content://media/picker/0/1',
+      type: OCMediaType.image,
+      width: 1080,
+      height: 1920,
+      createdAt: DateTime(2026, 1, 1),
+    ),
+    OCMediaItem(
+      id: 'content://media/picker/0/2',
+      type: OCMediaType.image,
+      width: 1080,
+      height: 1920,
+      createdAt: DateTime(2026, 1, 2),
+    ),
+  ];
+
   @override
-  Future<OCMediaPermissionStatus> permissionStatus({
+  Future<List<OCMediaItem>> pickMedia({
     Set<OCMediaType> types = kAllMediaTypes,
+    bool allowMultiple = true,
   }) async {
-    calls['permissionStatus'] = types;
-    return OCMediaPermissionStatus.limited;
-  }
-
-  @override
-  Future<OCMediaPermissionStatus> requestPermission({
-    Set<OCMediaType> types = kAllMediaTypes,
-  }) async {
-    calls['requestPermission'] = types;
-    return OCMediaPermissionStatus.granted;
-  }
-
-  @override
-  Future<bool> openSettings() async {
-    calls['openSettings'] = true;
-    return true;
-  }
-
-  @override
-  Future<OCMediaPermissionStatus> presentLimitedPicker() async {
-    calls['presentLimitedPicker'] = true;
-    return OCMediaPermissionStatus.limited;
-  }
-
-  @override
-  Future<List<OCMediaAlbum>> fetchAlbums({
-    Set<OCMediaType> types = kAllMediaTypes,
-  }) async {
-    calls['fetchAlbums'] = types;
-    return const [OCMediaAlbum(id: 'all', name: 'All', count: 1, isAll: true)];
-  }
-
-  @override
-  Future<OCMediaPage> fetchMedia({
-    String? albumId,
-    Set<OCMediaType> types = kAllMediaTypes,
-    int offset = 0,
-    int limit = 50,
-  }) async {
-    calls['fetchMedia'] = {
-      'albumId': albumId,
-      'types': types,
-      'offset': offset,
-      'limit': limit,
-    };
-    return OCMediaPage.empty;
+    calls['pickMedia'] = {'types': types, 'allowMultiple': allowMultiple};
+    return picked;
   }
 
   @override
@@ -84,24 +61,6 @@ class FakeBrowseFilesPlatform
   }
 
   @override
-  Future<OCDocumentPage> fetchDocuments({
-    List<String> mimeTypes = const [],
-    int offset = 0,
-    int limit = 50,
-  }) async {
-    calls['fetchDocuments'] = {
-      'mimeTypes': mimeTypes,
-      'offset': offset,
-      'limit': limit,
-    };
-    return const OCDocumentPage(
-      items: [OCDocumentItem(id: '7', name: 'notes.pdf')],
-      offset: 0,
-      total: 1,
-    );
-  }
-
-  @override
   Future<List<String>> pickDocuments({
     List<String> mimeTypes = const [],
     bool allowMultiple = true,
@@ -111,6 +70,20 @@ class FakeBrowseFilesPlatform
       'allowMultiple': allowMultiple,
     };
     return const ['/cache/doc.pdf'];
+  }
+
+  @override
+  Future<OCMediaItem?> captureMedia({
+    OCMediaType type = OCMediaType.image,
+  }) async {
+    calls['captureMedia'] = type;
+    return OCMediaItem(
+      id: '/cache/capture.${type == OCMediaType.video ? 'mp4' : 'jpg'}',
+      type: type,
+      width: 1080,
+      height: 1920,
+      createdAt: DateTime(2026, 1, 3),
+    );
   }
 }
 
@@ -133,61 +106,64 @@ void main() {
     test('forwards every call to the platform', () async {
       final plugin = OCBrowseFilesFlutter.instance;
 
-      expect(await plugin.permissionStatus(), OCMediaPermissionStatus.limited);
-      expect(await plugin.requestPermission(), OCMediaPermissionStatus.granted);
-      expect(await plugin.openSettings(), isTrue);
-      expect(
-        await plugin.presentLimitedPicker(),
-        OCMediaPermissionStatus.limited,
-      );
-      expect(await plugin.fetchAlbums(), hasLength(1));
-      expect(await plugin.fetchMedia(), OCMediaPage.empty);
+      expect(await plugin.pickMedia(), hasLength(2));
       expect(
         await plugin.loadThumbnail('1', width: 10, height: 10),
         Uint8List.fromList(const [1, 2, 3]),
       );
       expect(await plugin.resolveFile('1'), '/cache/1.jpg');
       expect(await plugin.pickDocuments(), const ['/cache/doc.pdf']);
+      expect((await plugin.captureMedia())?.id, '/cache/capture.jpg');
     });
 
-    test('passes its arguments through unchanged', () async {
-      await OCBrowseFilesFlutter.instance.fetchMedia(
-        albumId: 'camera',
+    test('passes the capture kind through and defaults to a photo', () async {
+      final plugin = OCBrowseFilesFlutter.instance;
+
+      final video = await plugin.captureMedia(type: OCMediaType.video);
+      expect(platform.calls['captureMedia'], OCMediaType.video);
+      expect(video?.isVideo, isTrue);
+
+      await plugin.captureMedia();
+      expect(platform.calls['captureMedia'], OCMediaType.image);
+    });
+
+    test('passes pickMedia arguments through unchanged', () async {
+      await OCBrowseFilesFlutter.instance.pickMedia(
         types: const {OCMediaType.video},
-        offset: 60,
-        limit: 30,
+        allowMultiple: false,
       );
 
-      expect(platform.calls['fetchMedia'], {
-        'albumId': 'camera',
+      expect(platform.calls['pickMedia'], {
         'types': const {OCMediaType.video},
-        'offset': 60,
-        'limit': 30,
+        'allowMultiple': false,
       });
     });
 
-    test('forwards fetchDocuments with its paging', () async {
-      final platform = FakeBrowseFilesPlatform();
-      OCBrowseFilesFlutterPlatform.instance = platform;
-
-      final page = await OCBrowseFilesFlutter.instance.fetchDocuments(
+    test('passes pickDocuments arguments through unchanged', () async {
+      await OCBrowseFilesFlutter.instance.pickDocuments(
         mimeTypes: const ['application/pdf'],
-        offset: 20,
-        limit: 10,
+        allowMultiple: false,
       );
 
-      expect(platform.calls['fetchDocuments'], {
+      expect(platform.calls['pickDocuments'], {
         'mimeTypes': ['application/pdf'],
-        'offset': 20,
-        'limit': 10,
+        'allowMultiple': false,
       });
-      expect(page.items.single.name, 'notes.pdf');
     });
 
-    test('defaults to both media types', () async {
-      await OCBrowseFilesFlutter.instance.fetchAlbums();
+    test('defaults to both media types and multi-select', () async {
+      await OCBrowseFilesFlutter.instance.pickMedia();
 
-      expect(platform.calls['fetchAlbums'], kAllMediaTypes);
+      expect(platform.calls['pickMedia'], {
+        'types': kAllMediaTypes,
+        'allowMultiple': true,
+      });
+    });
+
+    test('a dismissed picker comes back empty', () async {
+      platform.picked = const <OCMediaItem>[];
+
+      expect(await OCBrowseFilesFlutter.instance.pickMedia(), isEmpty);
     });
   });
 }

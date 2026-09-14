@@ -12,7 +12,7 @@ import 'package:flutter/foundation.dart';
 ///   options: const OCBrowseFilesOptions(
 ///     strings: OCBrowseFilesStrings(
 ///       confirmLabel: 'Envoyer',
-///       permissionAllowLabel: 'Autoriser',
+///       galleryEmptyActionLabel: 'Choisir',
 ///     ),
 ///   ),
 /// );
@@ -30,39 +30,28 @@ class OCBrowseFilesStrings {
     this.confirmLabel = 'Select',
     this.confirmButton = _confirmButton,
     this.selectionSummary = _selectionSummary,
-    this.albumMenuTooltip = 'Choose an album',
-    this.albumItemCount = _albumItemCount,
-    this.limitedAccessMessage = 'You shared some of your library',
-    this.selectMoreLabel = 'Select more',
-    this.permissionTitle = 'Let this app see your photos',
-    this.permissionDetail =
-        'Your photos and videos stay on the device; nothing is uploaded by '
-        'this sheet.',
-    this.permissionAllowLabel = 'Allow access',
-    this.permissionDeniedTitle = 'Photo access is turned off',
-    this.permissionDeniedDetail =
-        'Turn photo access on in Settings and come back.',
-    this.openSettingsLabel = 'Open settings',
-    this.galleryErrorTitle = 'The library could not be read',
-    this.retryLabel = 'Try again',
-    this.galleryEmptyTitle = 'Nothing here yet',
+    this.galleryEmptyTitle = 'Nothing picked yet',
     this.galleryEmptyDetail =
-        'Photos and videos on this device show up in this grid.',
+        'Photos and videos you pick land here, in the order you pick them.',
+    this.galleryEmptyActionLabel = 'Select photos & videos',
+    this.gallerySelectMoreLabel = 'Select more',
+    this.galleryErrorTitle = 'The picker could not be opened',
+    this.retryLabel = 'Try again',
     this.storagePickerTitle = 'Internal Storage',
     this.storagePickerSubtitle = 'Browse your file system',
-    this.recentFilesTitle = 'Recent files',
-    this.recentFilesOnlyDetail =
-        'The system keeps the rest of your storage behind its own picker: '
-        'Android 11 scoped it and iOS never opened it. Tap Internal '
-        'Storage to reach anything that is not listed here.',
-    this.noRecentFiles = 'No recent files — open Internal Storage to pick one.',
     this.unknownFileType = 'file',
+    this.actionsTitle = 'Attach',
+    this.takePhotoLabel = 'Take photo',
+    this.recordVideoLabel = 'Record video',
+    this.selectMediaLabel = 'Select photos & videos',
+    this.selectFilesLabel = 'Select files',
+    this.cameraErrorTitle = 'The camera could not be opened',
   });
 
   /// The full-screen browser's app bar title.
   final String pageTitle;
 
-  /// The full-screen browser's first tab: the media grid.
+  /// The full-screen browser's first tab: the gallery.
   final String mediaTabLabel;
 
   /// The full-screen browser's second tab: the file list.
@@ -79,49 +68,23 @@ class OCBrowseFilesStrings {
   final String Function(int media, int documents, int maxSelection)
   selectionSummary;
 
-  /// The long-press label on the album selector.
-  final String albumMenuTooltip;
-
-  /// How many assets the open album holds — `1 item` / `24 items`.
-  final String Function(int count) albumItemCount;
-
-  /// The banner shown when the user shared only part of their library.
-  final String limitedAccessMessage;
-
-  /// The banner's action: widen a partial grant.
-  final String selectMoreLabel;
-
-  /// Asking for library access, when the prompt is still available.
-  final String permissionTitle;
-
-  /// The reassurance under [permissionTitle].
-  final String permissionDetail;
-
-  /// The button that raises the OS permission prompt.
-  final String permissionAllowLabel;
-
-  /// Access was refused for good and only Settings can undo it.
-  final String permissionDeniedTitle;
-
-  /// The instructions under [permissionDeniedTitle].
-  final String permissionDeniedDetail;
-
-  /// The button that opens this app's page in system settings.
-  final String openSettingsLabel;
-
-  /// Heading of the panel that replaces the grid when a page failed to load.
-  ///
-  /// The platform's own message is shown under it, untouched.
-  final String galleryErrorTitle;
-
-  /// The action on that panel.
-  final String retryLabel;
-
-  /// Heading shown when the library holds nothing of the requested types.
+  /// Heading shown when nothing has been picked yet.
   final String galleryEmptyTitle;
 
   /// The line under [galleryEmptyTitle].
   final String galleryEmptyDetail;
+
+  /// The label on the button that opens the system Photo Picker.
+  final String galleryEmptyActionLabel;
+
+  /// The label on the button that adds more picks to an existing selection.
+  final String gallerySelectMoreLabel;
+
+  /// Heading of the panel shown when the picker fails to open.
+  final String galleryErrorTitle;
+
+  /// The action on that panel.
+  final String retryLabel;
 
   /// The row at the top of the Files tab that opens the system picker.
   final String storagePickerTitle;
@@ -129,18 +92,27 @@ class OCBrowseFilesStrings {
   /// The line under [storagePickerTitle].
   final String storagePickerSubtitle;
 
-  /// Heading over the files the platform will list by itself.
-  final String recentFilesTitle;
-
-  /// Why that listing is not the whole device, shown only when the platform
-  /// says it cannot enumerate storage.
-  final String recentFilesOnlyDetail;
-
-  /// Shown when that listing came back empty.
-  final String noRecentFiles;
-
   /// A file's subtitle when the platform gave neither size nor date.
   final String unknownFileType;
+
+  /// The heading of the short menu `OCBrowseFiles.showActions` opens.
+  final String actionsTitle;
+
+  /// The camera row that takes a photo — in the menu and in the choice the
+  /// sheet's camera tile offers when both kinds are allowed.
+  final String takePhotoLabel;
+
+  /// The camera row that records a video.
+  final String recordVideoLabel;
+
+  /// The menu row that opens the system media picker.
+  final String selectMediaLabel;
+
+  /// The menu row that opens the system document picker.
+  final String selectFilesLabel;
+
+  /// Heading of the panel shown when the camera fails to open.
+  final String cameraErrorTitle;
 
   /// A copy of these strings with the given ones replaced.
   OCBrowseFilesStrings copyWith({
@@ -151,26 +123,21 @@ class OCBrowseFilesStrings {
     String Function(String label, int count)? confirmButton,
     String Function(int media, int documents, int maxSelection)?
     selectionSummary,
-    String? albumMenuTooltip,
-    String Function(int count)? albumItemCount,
-    String? limitedAccessMessage,
-    String? selectMoreLabel,
-    String? permissionTitle,
-    String? permissionDetail,
-    String? permissionAllowLabel,
-    String? permissionDeniedTitle,
-    String? permissionDeniedDetail,
-    String? openSettingsLabel,
-    String? galleryErrorTitle,
-    String? retryLabel,
     String? galleryEmptyTitle,
     String? galleryEmptyDetail,
+    String? galleryEmptyActionLabel,
+    String? gallerySelectMoreLabel,
+    String? galleryErrorTitle,
+    String? retryLabel,
     String? storagePickerTitle,
     String? storagePickerSubtitle,
-    String? recentFilesTitle,
-    String? recentFilesOnlyDetail,
-    String? noRecentFiles,
     String? unknownFileType,
+    String? actionsTitle,
+    String? takePhotoLabel,
+    String? recordVideoLabel,
+    String? selectMediaLabel,
+    String? selectFilesLabel,
+    String? cameraErrorTitle,
   }) => OCBrowseFilesStrings(
     pageTitle: pageTitle ?? this.pageTitle,
     mediaTabLabel: mediaTabLabel ?? this.mediaTabLabel,
@@ -178,27 +145,23 @@ class OCBrowseFilesStrings {
     confirmLabel: confirmLabel ?? this.confirmLabel,
     confirmButton: confirmButton ?? this.confirmButton,
     selectionSummary: selectionSummary ?? this.selectionSummary,
-    albumMenuTooltip: albumMenuTooltip ?? this.albumMenuTooltip,
-    albumItemCount: albumItemCount ?? this.albumItemCount,
-    limitedAccessMessage: limitedAccessMessage ?? this.limitedAccessMessage,
-    selectMoreLabel: selectMoreLabel ?? this.selectMoreLabel,
-    permissionTitle: permissionTitle ?? this.permissionTitle,
-    permissionDetail: permissionDetail ?? this.permissionDetail,
-    permissionAllowLabel: permissionAllowLabel ?? this.permissionAllowLabel,
-    permissionDeniedTitle: permissionDeniedTitle ?? this.permissionDeniedTitle,
-    permissionDeniedDetail:
-        permissionDeniedDetail ?? this.permissionDeniedDetail,
-    openSettingsLabel: openSettingsLabel ?? this.openSettingsLabel,
-    galleryErrorTitle: galleryErrorTitle ?? this.galleryErrorTitle,
-    retryLabel: retryLabel ?? this.retryLabel,
     galleryEmptyTitle: galleryEmptyTitle ?? this.galleryEmptyTitle,
     galleryEmptyDetail: galleryEmptyDetail ?? this.galleryEmptyDetail,
+    galleryEmptyActionLabel:
+        galleryEmptyActionLabel ?? this.galleryEmptyActionLabel,
+    gallerySelectMoreLabel:
+        gallerySelectMoreLabel ?? this.gallerySelectMoreLabel,
+    galleryErrorTitle: galleryErrorTitle ?? this.galleryErrorTitle,
+    retryLabel: retryLabel ?? this.retryLabel,
     storagePickerTitle: storagePickerTitle ?? this.storagePickerTitle,
     storagePickerSubtitle: storagePickerSubtitle ?? this.storagePickerSubtitle,
-    recentFilesTitle: recentFilesTitle ?? this.recentFilesTitle,
-    recentFilesOnlyDetail: recentFilesOnlyDetail ?? this.recentFilesOnlyDetail,
-    noRecentFiles: noRecentFiles ?? this.noRecentFiles,
     unknownFileType: unknownFileType ?? this.unknownFileType,
+    actionsTitle: actionsTitle ?? this.actionsTitle,
+    takePhotoLabel: takePhotoLabel ?? this.takePhotoLabel,
+    recordVideoLabel: recordVideoLabel ?? this.recordVideoLabel,
+    selectMediaLabel: selectMediaLabel ?? this.selectMediaLabel,
+    selectFilesLabel: selectFilesLabel ?? this.selectFilesLabel,
+    cameraErrorTitle: cameraErrorTitle ?? this.cameraErrorTitle,
   );
 
   @override
@@ -209,5 +172,3 @@ String _confirmButton(String label, int count) => '$label ($count)';
 
 String _selectionSummary(int media, int documents, int maxSelection) =>
     '$media media · $documents files (max $maxSelection)';
-
-String _albumItemCount(int count) => count == 1 ? '1 item' : '$count items';

@@ -1,27 +1,39 @@
+import AVFoundation
 import Flutter
-import Photos
-// presentLimitedLibraryPicker lives in PhotosUI, not Photos.
 import PhotosUI
 import UIKit
 import UniformTypeIdentifiers
 
 /// iOS side of `browse_files_flutter`.
 ///
-/// `.limited` is a grant, not a refusal: the user shared part of the library and
-/// `presentLimitedLibraryPicker` widens it.
+/// Nothing here asks for photo library access. Media come through `PHPickerViewController`
+/// (iOS 14+; `UIImagePickerController` on iOS 13), which runs out of process and hands over
+/// copies of what the user chose, documents through `UIDocumentPickerViewController`, and
+/// captures through the system camera. Everything lands in the plugin's cache, so an item's
+/// id is a path and `resolveFile` has nothing left to do.
 ///
-/// Library reads run off the main thread and reply on it; the queries themselves live in
-/// `PhotoLibraryReader`.
-///
-/// The host app must carry `NSPhotoLibraryUsageDescription` in its Info.plist, or iOS kills
-/// the app the moment access is requested. See `example/ios/Runner/Info.plist`.
+/// The host app's Info.plist needs `NSCameraUsageDescription` for `captureMedia`, and
+/// `NSMicrophoneUsageDescription` too for video — iOS kills the app otherwise, which is why
+/// this plugin checks for them before opening the camera.
 ///
 /// Errors come back as `FlutterError(code:message:details:)` with a code from
-/// BrowseFilesErrorCode: permissionDenied, userCanceled, notFound, ioError, unsupported.
+/// `OCBrowseFilesErrorCode`: `permissionDenied`, `userCanceled`, `notFound`, `ioError`,
+/// `unsupported`, `unknown`.
 public class BrowseFilesFlutterPlugin: NSObject, FlutterPlugin {
+  /// The reply waiting on the media picker.
+  private var pendingMedia: FlutterResult?
+
+  /// The reply waiting on the camera.
+  private var pendingCapture: FlutterResult?
+
   /// The reply waiting on the system document picker, and the picker keeping itself alive.
   private var pendingDocuments: FlutterResult?
   private var documentPicker: UIDocumentPickerViewController?
+
+  /// `UIImagePickerController` serves both the camera and the iOS 13 library, so its delegate
+  /// has to know which reply it is answering.
+  private enum ImagePickerPurpose { case camera, library }
+  private var imagePickerPurpose = ImagePickerPurpose.library
 
   public static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(
@@ -33,38 +45,14 @@ public class BrowseFilesFlutterPlugin: NSObject, FlutterPlugin {
 
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     switch call.method {
-    case "permissionStatus":
-      result(Self.name(of: Self.authorization()))
-    case "requestPermission":
-      requestPermission(result: result)
-    case "presentLimitedPicker":
-      presentLimitedPicker(result: result)
-    case "openSettings":
-      openSettings(result: result)
-    case "fetchAlbums":
-      let types = Self.types(from: call)
-      onLibrary(result) { PhotoLibraryReader.fetchAlbums(types: types) }
-    case "fetchMedia":
-      let arguments = call.arguments as? [String: Any] ?? [:]
-      let types = Self.types(from: call)
-      let albumId = arguments["albumId"] as? String
-      let offset = arguments["offset"] as? Int ?? 0
-      let limit = arguments["limit"] as? Int ?? 50
-      onLibrary(result) {
-        PhotoLibraryReader.fetchMedia(types: types, albumId: albumId, offset: offset, limit: limit)
-      }
+    case "pickMedia":
+      pickMedia(call, result: result)
+    case "captureMedia":
+      captureMedia(call, result: result)
     case "loadThumbnail":
       loadThumbnail(call, result: result)
     case "resolveFile":
       resolveFile(call, result: result)
-    case "fetchDocuments":
-      let arguments = call.arguments as? [String: Any] ?? [:]
-      let mimeTypes = arguments["mimeTypes"] as? [String] ?? []
-      let offset = arguments["offset"] as? Int ?? 0
-      let limit = arguments["limit"] as? Int ?? 50
-      onLibrary(result) {
-        DocumentLibrary.fetchDocuments(mimeTypes: mimeTypes, offset: offset, limit: limit)
-      }
     case "pickDocuments":
       pickDocuments(call, result: result)
     default:
@@ -72,68 +60,155 @@ public class BrowseFilesFlutterPlugin: NSObject, FlutterPlugin {
     }
   }
 
-  /// Prompts once; iOS answers straight away with the recorded decision after that.
-  private func requestPermission(result: @escaping FlutterResult) {
-    let reply: (PHAuthorizationStatus) -> Void = { status in
-      DispatchQueue.main.async { result(Self.name(of: status)) }
+  // MARK: - pickMedia
+
+  /// Presents the system media picker; what it hands back is copied into the cache.
+  private func pickMedia(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    let arguments = call.arguments as? [String: Any] ?? [:]
+    let types = Set(arguments["types"] as? [String] ?? ["image", "video"])
+    let allowMultiple = arguments["allowMultiple"] as? Bool ?? true
+    guard pendingMedia == nil else {
+      result(FlutterError(code: "unknown", message: "A media picker is already open.", details: nil))
+      return
     }
+    guard let host = Self.topViewController() else {
+      result(
+        FlutterError(
+          code: "unsupported", message: "There is no view controller to present the picker from.",
+          details: nil))
+      return
+    }
+    pendingMedia = result
     if #available(iOS 14, *) {
-      PHPhotoLibrary.requestAuthorization(for: .readWrite, handler: reply)
+      var configuration = PHPickerConfiguration()
+      configuration.selectionLimit = allowMultiple ? 0 : 1
+      configuration.filter = Self.pickerFilter(for: types)
+      let picker = PHPickerViewController(configuration: configuration)
+      picker.delegate = self
+      host.present(picker, animated: true)
     } else {
-      PHPhotoLibrary.requestAuthorization(reply)
+      // iOS 13 has no PHPicker; the old picker still runs out of process and needs no
+      // permission, but takes one item at a time.
+      let picker = UIImagePickerController()
+      picker.sourceType = .photoLibrary
+      picker.mediaTypes = Self.imagePickerTypes(for: types)
+      picker.delegate = self
+      imagePickerPurpose = .library
+      host.present(picker, animated: true)
     }
   }
 
-  /// Shows the system sheet that widens a `.limited` grant, then reports where it left things.
-  private func presentLimitedPicker(result: @escaping FlutterResult) {
-    guard #available(iOS 14, *) else {
-      result(
-        FlutterError(
-          code: "unsupported",
-          message: "Limited library access needs iOS 14 or newer.", details: nil))
-      return
-    }
-    guard Self.authorization() == .limited else {
-      result(
-        FlutterError(
-          code: "unsupported",
-          message: "The limited-library picker only opens while access is limited.", details: nil))
-      return
-    }
-    guard let controller = Self.topViewController() else {
-      result(
-        FlutterError(
-          code: "unsupported",
-          message: "There is no view controller to present the picker from.", details: nil))
-      return
-    }
-    if #available(iOS 15, *) {
-      PHPhotoLibrary.shared().presentLimitedLibraryPicker(from: controller) { _ in
-        DispatchQueue.main.async { result(Self.name(of: Self.authorization())) }
-      }
-    } else {
-      PHPhotoLibrary.shared().presentLimitedLibraryPicker(from: controller)
-      // Pre-iOS 15 there is no completion handler, so this reports the level as it stands;
-      // the caller re-checks when the app comes back to the foreground.
-      result(Self.name(of: Self.authorization()))
-    }
+  @available(iOS 14, *)
+  private static func pickerFilter(for types: Set<String>) -> PHPickerFilter {
+    let wantsImages = types.contains("image")
+    let wantsVideos = types.contains("video")
+    if wantsImages && !wantsVideos { return .images }
+    if wantsVideos && !wantsImages { return .videos }
+    return .any(of: [.images, .videos])
   }
 
-  private func openSettings(result: @escaping FlutterResult) {
-    guard let url = URL(string: UIApplication.openSettingsURLString) else {
-      result(false)
+  private static func imagePickerTypes(for types: Set<String>) -> [String] {
+    var mediaTypes: [String] = []
+    if types.contains("image") { mediaTypes.append("public.image") }
+    if types.contains("video") { mediaTypes.append("public.movie") }
+    return mediaTypes.isEmpty ? ["public.image", "public.movie"] : mediaTypes
+  }
+
+  /// Answers the waiting `pickMedia` call exactly once.
+  fileprivate func finishMedia(with items: [[String: Any]]) {
+    let reply = pendingMedia
+    pendingMedia = nil
+    reply?(items)
+  }
+
+  // MARK: - captureMedia
+
+  /// Opens the system camera for a photo or a video.
+  ///
+  /// The missing-purpose-string case is caught here because the alternative is iOS killing
+  /// the app with no error anywhere Dart can see; a denied camera comes back as
+  /// `permissionDenied` rather than the black preview the picker would otherwise show.
+  private func captureMedia(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    let arguments = call.arguments as? [String: Any] ?? [:]
+    let isVideo = (arguments["type"] as? String) == "video"
+    guard pendingCapture == nil else {
+      result(FlutterError(code: "unknown", message: "The camera is already open.", details: nil))
       return
     }
-    DispatchQueue.main.async {
-      guard UIApplication.shared.canOpenURL(url) else {
-        result(false)
+    guard UIImagePickerController.isSourceTypeAvailable(.camera) else {
+      // The simulator lands here: there is no camera to open.
+      result(FlutterError(code: "unsupported", message: "This device has no camera.", details: nil))
+      return
+    }
+    let info = Bundle.main.infoDictionary ?? [:]
+    guard info["NSCameraUsageDescription"] != nil else {
+      result(
+        FlutterError(
+          code: "unsupported",
+          message: "Add NSCameraUsageDescription to the app's Info.plist to open the camera.",
+          details: nil))
+      return
+    }
+    if isVideo, info["NSMicrophoneUsageDescription"] == nil {
+      result(
+        FlutterError(
+          code: "unsupported",
+          message: "Add NSMicrophoneUsageDescription to the app's Info.plist to record video.",
+          details: nil))
+      return
+    }
+    pendingCapture = result
+    Self.requestCameraAccess { [weak self] granted in
+      guard let self else { return }
+      guard granted else {
+        self.finishCapture(
+          error: FlutterError(
+            code: "permissionDenied",
+            message: "Camera access was refused; it can be turned on in Settings.",
+            details: nil))
         return
       }
-      UIApplication.shared.open(url, options: [:]) { opened in
-        DispatchQueue.main.async { result(opened) }
+      guard let host = Self.topViewController() else {
+        self.finishCapture(
+          error: FlutterError(
+            code: "unsupported",
+            message: "There is no view controller to present the camera from.",
+            details: nil))
+        return
       }
+      let picker = UIImagePickerController()
+      picker.sourceType = .camera
+      picker.mediaTypes = [isVideo ? "public.movie" : "public.image"]
+      picker.cameraCaptureMode = isVideo ? .video : .photo
+      picker.videoQuality = .typeHigh
+      picker.delegate = self
+      self.imagePickerPurpose = .camera
+      host.present(picker, animated: true)
     }
   }
+
+  /// Asks for the camera if iOS has not asked yet, and calls back on the main thread.
+  private static func requestCameraAccess(_ completion: @escaping (Bool) -> Void) {
+    switch AVCaptureDevice.authorizationStatus(for: .video) {
+    case .authorized:
+      completion(true)
+    case .notDetermined:
+      AVCaptureDevice.requestAccess(for: .video) { granted in
+        DispatchQueue.main.async { completion(granted) }
+      }
+    default:
+      completion(false)
+    }
+  }
+
+  /// Answers the waiting `captureMedia` call exactly once.
+  fileprivate func finishCapture(with item: [String: Any]? = nil, error: FlutterError? = nil) {
+    let reply = pendingCapture
+    pendingCapture = nil
+    reply?(error ?? item)
+  }
+
+  // MARK: - loadThumbnail / resolveFile
 
   private func loadThumbnail(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     let arguments = call.arguments as? [String: Any] ?? [:]
@@ -145,25 +220,30 @@ public class BrowseFilesFlutterPlugin: NSObject, FlutterPlugin {
     let width = arguments["width"] as? Int ?? 256
     let height = arguments["height"] as? Int ?? 256
     let quality = arguments["quality"] as? Int ?? 80
-    PhotoLibraryReader.loadThumbnail(id: id, width: width, height: height, quality: quality) {
-      data in
+    guard FileManager.default.fileExists(atPath: id) else {
+      result(nil)
+      return
+    }
+    MediaFiles.queue.async {
+      let data = MediaFiles.loadThumbnail(path: id, width: width, height: height, quality: quality)
       DispatchQueue.main.async {
         result(data.map { FlutterStandardTypedData(bytes: $0) })
       }
     }
   }
 
+  /// Every id this plugin hands out is already a file in the cache, so this only checks it is
+  /// still there — a nil crosses the channel as `notFound`.
   private func resolveFile(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     let arguments = call.arguments as? [String: Any] ?? [:]
     guard let id = arguments["id"] as? String else {
       result(FlutterError(code: "notFound", message: "resolveFile needs an asset id.", details: nil))
       return
     }
-    // A nil path crosses the channel as notFound, which is what a missing asset is.
-    PhotoLibraryReader.resolveFile(id: id) { path in
-      DispatchQueue.main.async { result(path) }
-    }
+    result(FileManager.default.fileExists(atPath: id) ? id : nil)
   }
+
+  // MARK: - pickDocuments
 
   /// Opens the system document picker; browsing storage ourselves is not this package's job.
   private func pickDocuments(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -222,54 +302,12 @@ public class BrowseFilesFlutterPlugin: NSObject, FlutterPlugin {
     return types
   }
 
-  /// Runs a library read off the main thread and replies on it.
-  private func onLibrary(_ result: @escaping FlutterResult, work: @escaping () -> Any?) {
-    DispatchQueue.global(qos: .userInitiated).async {
-      let value = work()
-      DispatchQueue.main.async { result(value) }
-    }
-  }
-
-  private static func types(from call: FlutterMethodCall) -> Set<String> {
-    let arguments = call.arguments as? [String: Any] ?? [:]
-    return Set(arguments["types"] as? [String] ?? ["image", "video"])
-  }
-
   /// Answers the waiting `pickDocuments` call exactly once.
   fileprivate func finishDocuments(with paths: [String]) {
     let reply = pendingDocuments
     pendingDocuments = nil
     documentPicker = nil
     reply?(paths)
-  }
-
-  private static func authorization() -> PHAuthorizationStatus {
-    if #available(iOS 14, *) {
-      return PHPhotoLibrary.authorizationStatus(for: .readWrite)
-    }
-    return PHPhotoLibrary.authorizationStatus()
-  }
-
-  /// The MediaPermissionStatus name the Dart side expects.
-  ///
-  /// `.denied` maps to `permanentlyDenied`: iOS records the answer and never prompts again,
-  /// so only Settings can change it.
-  private static func name(of status: PHAuthorizationStatus) -> String {
-    if #available(iOS 14, *), status == .limited {
-      return "limited"
-    }
-    switch status {
-    case .authorized:
-      return "granted"
-    case .denied:
-      return "permanentlyDenied"
-    case .restricted:
-      return "restricted"
-    case .notDetermined:
-      return "notDetermined"
-    default:
-      return "denied"
-    }
   }
 
   private static func topViewController() -> UIViewController? {
@@ -284,12 +322,86 @@ public class BrowseFilesFlutterPlugin: NSObject, FlutterPlugin {
   }
 }
 
+// MARK: - PHPickerViewControllerDelegate
+
+@available(iOS 14, *)
+extension BrowseFilesFlutterPlugin: PHPickerViewControllerDelegate {
+  /// Copies every pick into the cache, in the order the user chose them, and answers once.
+  ///
+  /// `loadFileRepresentation` hands over a temporary URL that is gone the moment the callback
+  /// returns, so the copy happens inside it; the callbacks run concurrently and the results
+  /// are slotted back by index.
+  public func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+    picker.dismiss(animated: true)
+    guard !results.isEmpty else {
+      // Backing out of the picker is a normal outcome, not a failure.
+      finishMedia(with: [])
+      return
+    }
+    var items = [[String: Any]?](repeating: nil, count: results.count)
+    let lock = NSLock()
+    let group = DispatchGroup()
+    for (index, result) in results.enumerated() {
+      let provider = result.itemProvider
+      let isVideo = provider.hasItemConformingToTypeIdentifier(UTType.movie.identifier)
+      let identifier = isVideo ? UTType.movie.identifier : UTType.image.identifier
+      guard provider.hasItemConformingToTypeIdentifier(identifier) else { continue }
+      group.enter()
+      provider.loadFileRepresentation(forTypeIdentifier: identifier) { url, _ in
+        defer { group.leave() }
+        guard let url, let path = MediaFiles.copyToCache(url: url) else { return }
+        let item = MediaFiles.describe(path: path, isVideo: isVideo)
+        lock.lock()
+        items[index] = item
+        lock.unlock()
+      }
+    }
+    group.notify(queue: .main) { [weak self] in
+      self?.finishMedia(with: items.compactMap { $0 })
+    }
+  }
+}
+
+// MARK: - UIImagePickerControllerDelegate
+
+extension BrowseFilesFlutterPlugin: UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+  public func imagePickerController(
+    _ picker: UIImagePickerController,
+    didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
+  ) {
+    picker.dismiss(animated: true)
+    let purpose = imagePickerPurpose
+    MediaFiles.queue.async {
+      let item = MediaFiles.store(info: info)
+      DispatchQueue.main.async { [weak self] in
+        switch purpose {
+        case .camera:
+          self?.finishCapture(with: item)
+        case .library:
+          self?.finishMedia(with: item.map { [$0] } ?? [])
+        }
+      }
+    }
+  }
+
+  public func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+    picker.dismiss(animated: true)
+    // Backing out is a normal outcome: nil from the camera, nothing from the library.
+    switch imagePickerPurpose {
+    case .camera: finishCapture()
+    case .library: finishMedia(with: [])
+    }
+  }
+}
+
+// MARK: - UIDocumentPickerDelegate
+
 extension BrowseFilesFlutterPlugin: UIDocumentPickerDelegate {
   public func documentPicker(
     _ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]
   ) {
-    DispatchQueue.global(qos: .userInitiated).async {
-      let paths = urls.compactMap { PhotoLibraryReader.copyToCache(url: $0) }
+    MediaFiles.queue.async {
+      let paths = urls.compactMap { MediaFiles.copyToCache(url: $0) }
       DispatchQueue.main.async { self.finishDocuments(with: paths) }
     }
   }

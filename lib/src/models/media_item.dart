@@ -41,11 +41,13 @@ class OCMediaItem {
     );
   }
 
-  /// The library identifier: a `MediaStore` id on Android, a `PHAsset`
-  /// `localIdentifier` on iOS.
+  /// The asset's library identifier: a `content://` URI on Android, a
+  /// `PHAsset` `localIdentifier` on iOS.
   ///
-  /// Stable enough to key a thumbnail cache and to re-resolve later, but it
-  /// means nothing to `dart:io` — it is not a path.
+  /// Comes from [OCBrowseFilesFlutter.pickMedia]. It is **not** a file path —
+  /// it means nothing to `dart:io`. Use [OCBrowseFilesFlutter.loadThumbnail]
+  /// for a grid tile and [OCBrowseFilesFlutter.resolveFile] to copy the asset
+  /// into the app cache as a real file.
   final String id;
 
   /// Whether this is an image or a video.

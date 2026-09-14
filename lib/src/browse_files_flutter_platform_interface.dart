@@ -1,11 +1,9 @@
-import 'package:flutter/foundation.dart';
+import 'dart:typed_data';
+
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 
 import 'browse_files_flutter_method_channel.dart';
-import 'models/document_page.dart';
-import 'models/media_album.dart';
-import 'models/media_page.dart';
-import 'models/media_permission.dart';
+import 'models/media_item.dart';
 import 'models/media_type.dart';
 
 /// Every media type the picker knows about — the default filter.
@@ -17,9 +15,12 @@ const Set<OCMediaType> kAllMediaTypes = {OCMediaType.image, OCMediaType.video};
 /// Platform implementations should extend this class rather than implement it,
 /// so that new members can be added without breaking them.
 ///
-/// Everything here is deliberately low-level: enumeration is paged, thumbnails
-/// are fetched one asset at a time, and files are only materialised on demand.
-/// The sheet UI is a consumer of this interface, never a peer of it.
+/// The whole API is deliberately low-level: picking goes through the
+/// platform's system picker (Android Photo Picker / iOS PHPickerViewController
+/// / Android SAF), so the plugin never declares any media permission.
+/// Thumbnails and file materialisation are fetched one asset at a time, and
+/// files are only copied out of the picker grant on demand. The sheet UI is a
+/// consumer of this interface, never a peer of it.
 abstract class OCBrowseFilesFlutterPlatform extends PlatformInterface {
   /// Constructs a platform implementation.
   OCBrowseFilesFlutterPlatform() : super(token: _token);
@@ -42,62 +43,22 @@ abstract class OCBrowseFilesFlutterPlatform extends PlatformInterface {
     _instance = instance;
   }
 
-  /// The current access level, without prompting.
-  Future<OCMediaPermissionStatus> permissionStatus({
-    Set<OCMediaType> types = kAllMediaTypes,
-  }) {
-    throw UnimplementedError('permissionStatus() has not been implemented.');
-  }
-
-  /// Prompts for library access and reports what the user granted.
+  /// Opens the system media picker and returns what the user chose.
   ///
-  /// May resolve to [OCMediaPermissionStatus.limited]: on Android 14+ and iOS the
-  /// user can share a subset instead of the whole library, and that is a
-  /// success, not a refusal.
-  Future<OCMediaPermissionStatus> requestPermission({
-    Set<OCMediaType> types = kAllMediaTypes,
-  }) {
-    throw UnimplementedError('requestPermission() has not been implemented.');
-  }
-
-  /// Opens this app's page in system settings, for when prompting is no longer
-  /// possible. Resolves to whether the settings screen was actually opened.
-  Future<bool> openSettings() {
-    throw UnimplementedError('openSettings() has not been implemented.');
-  }
-
-  /// Shows the OS picker that widens a [OCMediaPermissionStatus.limited] grant,
-  /// and reports the access level once it closes.
+  /// On Android 13+ this is the Photo Picker (`ACTION_PICK_IMAGES`), below
+  /// that the legacy `ACTION_GET_CONTENT` — neither requires a permission.
+  /// On iOS the PHPickerViewController is used. Resolves to an empty list
+  /// when the user dismissed the picker.
   ///
-  /// The "select more photos" affordance the grid shows in limited mode.
-  Future<OCMediaPermissionStatus> presentLimitedPicker() {
-    throw UnimplementedError(
-      'presentLimitedPicker() has not been implemented.',
-    );
-  }
-
-  /// The albums that hold at least one asset of the given [types].
-  ///
-  /// The first entry is the synthetic "all media" album the grid opens on.
-  Future<List<OCMediaAlbum>> fetchAlbums({
+  /// The id of every returned [OCMediaItem] is a content URI (Android) or an
+  /// asset identifier (iOS). It is **not** a file path: pass it to
+  /// [loadThumbnail] for a grid tile and to [resolveFile] when the host app
+  /// needs bytes on disk.
+  Future<List<OCMediaItem>> pickMedia({
     Set<OCMediaType> types = kAllMediaTypes,
+    bool allowMultiple = true,
   }) {
-    throw UnimplementedError('fetchAlbums() has not been implemented.');
-  }
-
-  /// One page of an album, newest first.
-  ///
-  /// Pass a `null` [albumId] for the whole library. Implementations must query
-  /// off the platform main thread and must not read more than [limit] rows —
-  /// the grid pages as it scrolls, and a full-library fetch will not fit in
-  /// memory or in a channel message.
-  Future<OCMediaPage> fetchMedia({
-    String? albumId,
-    Set<OCMediaType> types = kAllMediaTypes,
-    int offset = 0,
-    int limit = 50,
-  }) {
-    throw UnimplementedError('fetchMedia() has not been implemented.');
+    throw UnimplementedError('pickMedia() has not been implemented.');
   }
 
   /// A JPEG thumbnail for one asset, sized to roughly [width] x [height]
@@ -116,25 +77,12 @@ abstract class OCBrowseFilesFlutterPlatform extends PlatformInterface {
 
   /// Materialises an asset as a real file and returns its path.
   ///
-  /// Library ids are not paths, so the asset is copied into the app cache —
-  /// iCloud assets may have to be downloaded first, which can take a while.
-  /// Call this on the final selection, not on every tile.
+  /// The id comes from [pickMedia]: it is a content URI on Android or a
+  /// PHAsset local identifier on iOS. The asset is copied into the app cache
+  /// so the host app gets a file it owns; the original picker grant can be
+  /// revoked later without affecting that copy.
   Future<String> resolveFile(String id) {
     throw UnimplementedError('resolveFile() has not been implemented.');
-  }
-
-  /// One page of the files this platform is willing to list, most recently
-  /// changed first.
-  ///
-  /// This is never the whole device: scoped storage on Android 11+ and the
-  /// sandbox on iOS keep everything but this app's own files behind the system
-  /// picker, and [OCDocumentPage.enumerable] says when that is the case.
-  Future<OCDocumentPage> fetchDocuments({
-    List<String> mimeTypes = const [],
-    int offset = 0,
-    int limit = 50,
-  }) {
-    throw UnimplementedError('fetchDocuments() has not been implemented.');
   }
 
   /// Opens the system document picker and returns cached paths for what the
@@ -149,5 +97,21 @@ abstract class OCBrowseFilesFlutterPlatform extends PlatformInterface {
     bool allowMultiple = true,
   }) {
     throw UnimplementedError('pickDocuments() has not been implemented.');
+  }
+
+  /// Opens the system camera to take a photo or record a video, and returns
+  /// the capture — or `null` if the user backed out.
+  ///
+  /// `ACTION_IMAGE_CAPTURE` / `ACTION_VIDEO_CAPTURE` on Android,
+  /// `UIImagePickerController` with the camera source on iOS. The capture is
+  /// written straight into the app cache rather than the user's library, so
+  /// no storage or photo permission is involved; the returned item's id is
+  /// already a resolved file and [resolveFile] hands it straight back.
+  ///
+  /// iOS needs `NSCameraUsageDescription` in the host's Info.plist, and
+  /// `NSMicrophoneUsageDescription` too for video. Without them iOS kills the
+  /// app when the camera opens.
+  Future<OCMediaItem?> captureMedia({OCMediaType type = OCMediaType.image}) {
+    throw UnimplementedError('captureMedia() has not been implemented.');
   }
 }
