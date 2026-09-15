@@ -49,6 +49,8 @@ public class BrowseFilesFlutterPlugin: NSObject, FlutterPlugin {
       pickMedia(call, result: result)
     case "captureMedia":
       captureMedia(call, result: result)
+    case "requestCameraPermission":
+      requestCameraPermission(call, result: result)
     case "loadThumbnail":
       loadThumbnail(call, result: result)
     case "resolveFile":
@@ -143,32 +145,19 @@ public class BrowseFilesFlutterPlugin: NSObject, FlutterPlugin {
       result(FlutterError(code: "unsupported", message: "This device has no camera.", details: nil))
       return
     }
-    let info = Bundle.main.infoDictionary ?? [:]
-    guard info["NSCameraUsageDescription"] != nil else {
-      result(
-        FlutterError(
-          code: "unsupported",
-          message: "Add NSCameraUsageDescription to the app's Info.plist to open the camera.",
-          details: nil))
-      return
-    }
-    if isVideo, info["NSMicrophoneUsageDescription"] == nil {
-      result(
-        FlutterError(
-          code: "unsupported",
-          message: "Add NSMicrophoneUsageDescription to the app's Info.plist to record video.",
-          details: nil))
+    if let missing = Self.missingUsageDescription(isVideo: isVideo) {
+      result(missing)
       return
     }
     pendingCapture = result
-    Self.requestCameraAccess { [weak self] granted in
+    Self.authorizeCamera(isVideo: isVideo) { [weak self] status in
       guard let self else { return }
-      guard granted else {
+      guard status == Self.granted else {
         self.finishCapture(
           error: FlutterError(
             code: "permissionDenied",
             message: "Camera access was refused; it can be turned on in Settings.",
-            details: nil))
+            details: status))
         return
       }
       guard let host = Self.topViewController() else {
@@ -190,17 +179,91 @@ public class BrowseFilesFlutterPlugin: NSObject, FlutterPlugin {
     }
   }
 
-  /// Asks for the camera if iOS has not asked yet, and calls back on the main thread.
-  private static func requestCameraAccess(_ completion: @escaping (Bool) -> Void) {
+  // MARK: - requestCameraPermission
+
+  /// Where the app stands with the camera, prompting first if iOS has not asked yet.
+  ///
+  /// The same checks `captureMedia` runs before opening the camera, without the camera: the
+  /// sheet calls this first so a refused camera is a message rather than a black preview.
+  /// Video also asks for the microphone, but a refused microphone does not change the answer
+  /// — `UIImagePickerController` records without sound in that case.
+  private func requestCameraPermission(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    let arguments = call.arguments as? [String: Any] ?? [:]
+    let isVideo = (arguments["type"] as? String) == "video"
+    if let missing = Self.missingUsageDescription(isVideo: isVideo) {
+      result(missing)
+      return
+    }
+    Self.authorizeCamera(isVideo: isVideo) { status in result(status) }
+  }
+
+  // OCCameraPermission on the Dart side.
+  private static let granted = "granted"
+  private static let denied = "denied"
+  private static let permanentlyDenied = "permanentlyDenied"
+
+  /// The `unsupported` error for a purpose string the host forgot, or nil when both the camera
+  /// and (for video) the microphone have one. Caught here because the alternative is iOS
+  /// killing the app with no error anywhere Dart can see.
+  private static func missingUsageDescription(isVideo: Bool) -> FlutterError? {
+    let info = Bundle.main.infoDictionary ?? [:]
+    guard info["NSCameraUsageDescription"] != nil else {
+      return FlutterError(
+        code: "unsupported",
+        message: "Add NSCameraUsageDescription to the app's Info.plist to open the camera.",
+        details: nil)
+    }
+    if isVideo, info["NSMicrophoneUsageDescription"] == nil {
+      return FlutterError(
+        code: "unsupported",
+        message: "Add NSMicrophoneUsageDescription to the app's Info.plist to record video.",
+        details: nil)
+    }
+    return nil
+  }
+
+  /// Resolves the camera's authorization to an `OCCameraPermission` name, asking iOS to
+  /// prompt when it has not yet, and — for video — asking for the microphone after the camera
+  /// so both prompts land before the picker opens. Calls back on the main thread.
+  private static func authorizeCamera(isVideo: Bool, completion: @escaping (String) -> Void) {
     switch AVCaptureDevice.authorizationStatus(for: .video) {
     case .authorized:
-      completion(true)
-    case .notDetermined:
-      AVCaptureDevice.requestAccess(for: .video) { granted in
-        DispatchQueue.main.async { completion(granted) }
+      if isVideo {
+        authorizeMicrophone { completion(granted) }
+      } else {
+        completion(granted)
       }
-    default:
-      completion(false)
+    case .notDetermined:
+      AVCaptureDevice.requestAccess(for: .video) { ok in
+        DispatchQueue.main.async {
+          guard ok else {
+            // iOS shows the prompt once; a refusal here is only undone in Settings.
+            completion(permanentlyDenied)
+            return
+          }
+          if isVideo {
+            authorizeMicrophone { completion(granted) }
+          } else {
+            completion(granted)
+          }
+        }
+      }
+    case .denied, .restricted:
+      completion(permanentlyDenied)
+    @unknown default:
+      completion(denied)
+    }
+  }
+
+  /// Prompts for the microphone if iOS has not asked yet; the answer is not reported because
+  /// it never blocks a capture.
+  private static func authorizeMicrophone(_ completion: @escaping () -> Void) {
+    guard AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined else {
+      completion()
+      return
+    }
+    AVCaptureDevice.requestAccess(for: .audio) { _ in
+      DispatchQueue.main.async(execute: completion)
     }
   }
 

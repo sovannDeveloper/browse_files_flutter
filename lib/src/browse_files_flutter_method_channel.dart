@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import 'browse_files_flutter_platform_interface.dart';
 import 'models/browse_files_exception.dart';
+import 'models/camera_permission.dart';
 import 'models/media_item.dart';
 import 'models/media_type.dart';
 
@@ -101,6 +102,19 @@ class OCMethodChannelBrowseFilesFlutter extends OCBrowseFilesFlutterPlatform {
       );
       // A null reply is the user backing out of the camera, not a failure.
       return raw == null ? null : OCMediaItem.fromMap(raw);
+    });
+  }
+
+  @override
+  Future<OCCameraPermission> requestCameraPermission({
+    OCMediaType type = OCMediaType.image,
+  }) async {
+    return _guard(() async {
+      final status = await methodChannel.invokeMethod<String>(
+        'requestCameraPermission',
+        <String, Object?>{'type': type.name},
+      );
+      return OCCameraPermission.fromName(status);
     });
   }
 

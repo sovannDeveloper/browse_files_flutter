@@ -1,3 +1,17 @@
+## 0.1.2
+
+* `requestCameraPermission(type:)`: checks — and prompts for — camera access without opening
+  the camera, answering an `OCCameraPermission` (`granted`, `denied`, `permanentlyDenied`).
+  The sheet's camera tile and the `showActions` photo/video rows call it before
+  `captureMedia`, so a refused camera is the `cameraPermissionDenied` string in the sheet
+  (or a `permissionDenied` exception from the menu) rather than a dead tap.
+* Android: a host app that declares `CAMERA` in its own manifest makes the capture intent
+  require it; `captureMedia` now prompts for it in that case instead of failing with
+  `permissionDenied` straight away. The plugin still declares no permission of its own, and
+  without the host declaration nothing is asked.
+* iOS: recording a video also prompts for the microphone ahead of the picker; a refused
+  microphone does not block the capture.
+
 ## 0.1.1
 
 * Android 13+: the Photo Picker allows more than one item again. Multi-select was requested

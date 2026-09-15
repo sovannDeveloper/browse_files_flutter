@@ -46,6 +46,8 @@ class OCBrowseFilesStrings {
     this.selectMediaLabel = 'Select photos & videos',
     this.selectFilesLabel = 'Select files',
     this.cameraErrorTitle = 'The camera could not be opened',
+    this.cameraPermissionDenied =
+        'Allow camera access in Settings to take photos and record videos.',
   });
 
   /// The full-screen browser's app bar title.
@@ -114,6 +116,10 @@ class OCBrowseFilesStrings {
   /// Heading of the panel shown when the camera fails to open.
   final String cameraErrorTitle;
 
+  /// Body of that panel when the user refused camera access — also the
+  /// message of the `permissionDenied` exception `showActions` throws.
+  final String cameraPermissionDenied;
+
   /// A copy of these strings with the given ones replaced.
   OCBrowseFilesStrings copyWith({
     String? pageTitle,
@@ -138,6 +144,7 @@ class OCBrowseFilesStrings {
     String? selectMediaLabel,
     String? selectFilesLabel,
     String? cameraErrorTitle,
+    String? cameraPermissionDenied,
   }) => OCBrowseFilesStrings(
     pageTitle: pageTitle ?? this.pageTitle,
     mediaTabLabel: mediaTabLabel ?? this.mediaTabLabel,
@@ -162,6 +169,8 @@ class OCBrowseFilesStrings {
     selectMediaLabel: selectMediaLabel ?? this.selectMediaLabel,
     selectFilesLabel: selectFilesLabel ?? this.selectFilesLabel,
     cameraErrorTitle: cameraErrorTitle ?? this.cameraErrorTitle,
+    cameraPermissionDenied:
+        cameraPermissionDenied ?? this.cameraPermissionDenied,
   );
 
   @override

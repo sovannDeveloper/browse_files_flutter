@@ -26,6 +26,7 @@ library;
 import 'dart:typed_data';
 
 import 'src/browse_files_flutter_platform_interface.dart';
+import 'src/models/camera_permission.dart';
 import 'src/models/media_item.dart';
 import 'src/models/media_type.dart';
 
@@ -37,6 +38,7 @@ export 'src/models/browse_files_exception.dart';
 export 'src/models/browse_files_options.dart';
 export 'src/models/browse_files_result.dart';
 export 'src/models/browse_files_strings.dart';
+export 'src/models/camera_permission.dart';
 export 'src/models/document_item.dart';
 export 'src/models/media_item.dart';
 export 'src/models/media_type.dart';
@@ -110,4 +112,17 @@ class OCBrowseFilesFlutter {
   /// video) in the host's Info.plist.
   Future<OCMediaItem?> captureMedia({OCMediaType type = OCMediaType.image}) =>
       _platform.captureMedia(type: type);
+
+  /// Checks — and, when the platform has not asked yet, requests — camera
+  /// access for a capture of [type], without opening the camera.
+  ///
+  /// The sheet and the actions menu call this before [captureMedia] so a
+  /// refused camera surfaces as a message rather than a dead tap. On Android
+  /// it only matters when the host app declares `CAMERA` in its own manifest,
+  /// which makes the capture intent require it; otherwise the answer is
+  /// [OCCameraPermission.granted] immediately. On iOS this is the
+  /// `AVCaptureDevice` prompt (camera, plus the microphone for video).
+  Future<OCCameraPermission> requestCameraPermission({
+    OCMediaType type = OCMediaType.image,
+  }) => _platform.requestCameraPermission(type: type);
 }

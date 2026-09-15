@@ -195,6 +195,33 @@ void main() {
     expect(calls.single.arguments, {'type': 'image'});
   });
 
+  test(
+    'requestCameraPermission sends the kind and decodes the status',
+    () async {
+      answerWith((_) async => 'permanentlyDenied');
+
+      expect(
+        await platform.requestCameraPermission(type: OCMediaType.video),
+        OCCameraPermission.permanentlyDenied,
+      );
+      expect(calls.single.method, 'requestCameraPermission');
+      expect(calls.single.arguments, {'type': 'video'});
+    },
+  );
+
+  test(
+    'requestCameraPermission defaults to a photo; unknown is denied',
+    () async {
+      answerWith((_) async => 'something-new');
+
+      expect(
+        await platform.requestCameraPermission(),
+        OCCameraPermission.denied,
+      );
+      expect(calls.single.arguments, {'type': 'image'});
+    },
+  );
+
   test('captureMedia wraps platform errors', () async {
     answerWith(
       (_) async => throw PlatformException(

@@ -1,12 +1,16 @@
 package com.kedtec.browse_files_flutter
 
+import android.Manifest
 import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.embedding.engine.plugins.activity.ActivityAware
@@ -16,6 +20,7 @@ import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
 import io.flutter.plugin.common.PluginRegistry.ActivityResultListener
+import io.flutter.plugin.common.PluginRegistry.RequestPermissionsResultListener
 import java.io.File
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -41,6 +46,9 @@ import android.os.Looper
  * The camera is the system camera app (`ACTION_IMAGE_CAPTURE` / `ACTION_VIDEO_CAPTURE`)
  * writing into this app's cache through [BrowseFilesFileProvider], so a capture needs no
  * CAMERA or storage permission and comes back as a `file://` id that is already resolved.
+ * The one exception: a host app that declares `CAMERA` itself makes the intent require it,
+ * so `requestCameraPermission` (and `captureMedia` before it opens the camera) prompts for
+ * it in that case only.
  *
  * Errors come back as `result.error(code, message, details)` with a code from
  * `BrowseFilesErrorCode`: `permissionDenied`, `userCanceled`, `notFound`,
@@ -50,7 +58,8 @@ class BrowseFilesFlutterPlugin :
     FlutterPlugin,
     ActivityAware,
     MethodCallHandler,
-    ActivityResultListener {
+    ActivityResultListener,
+    RequestPermissionsResultListener {
     private lateinit var channel: MethodChannel
     private var context: Context? = null
     private var activity: Activity? = null
@@ -66,6 +75,9 @@ class BrowseFilesFlutterPlugin :
     private var pendingCapture: Result? = null
     private var captureTarget: File? = null
     private var captureIsVideo: Boolean = false
+
+    /** What to do with the answer to the CAMERA prompt, once the user gives one. */
+    private var pendingPermission: ((String) -> Unit)? = null
 
     /**
      * Created on first use, not on construction: touching Looper in a constructor makes the
@@ -102,6 +114,7 @@ class BrowseFilesFlutterPlugin :
         activityBinding = binding
         activity = binding.activity
         binding.addActivityResultListener(this)
+        binding.addRequestPermissionsResultListener(this)
     }
 
     override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {
@@ -118,6 +131,7 @@ class BrowseFilesFlutterPlugin :
 
     private fun detachActivity() {
         activityBinding?.removeActivityResultListener(this)
+        activityBinding?.removeRequestPermissionsResultListener(this)
         activityBinding = null
         activity = null
     }
@@ -132,6 +146,7 @@ class BrowseFilesFlutterPlugin :
             "resolveFile" -> resolveFile(call, result)
             "pickDocuments" -> pickDocuments(call, result)
             "captureMedia" -> captureMedia(call, result)
+            "requestCameraPermission" -> requestCameraPermission(result)
             else -> result.notImplemented()
         }
     }
@@ -299,7 +314,32 @@ class BrowseFilesFlutterPlugin :
             result.error(UNKNOWN, "The camera is already open.", null)
             return
         }
+        if (pendingPermission != null) {
+            result.error(UNKNOWN, "The camera permission prompt is already open.", null)
+            return
+        }
         val isVideo = call.argument<String>("type") == VIDEO
+        // Ask first when the host manifest makes the intent require CAMERA, so a direct
+        // caller gets the prompt rather than the SecurityException below.
+        ensureCameraPermission(activity) { status ->
+            if (status != GRANTED) {
+                result.error(
+                    PERMISSION_DENIED,
+                    "Camera access was refused; it can be turned on in Settings.",
+                    status
+                )
+                return@ensureCameraPermission
+            }
+            startCapture(activity, context, isVideo, result)
+        }
+    }
+
+    private fun startCapture(
+        activity: Activity,
+        context: Context,
+        isVideo: Boolean,
+        result: Result
+    ) {
         val target =
             File(MediaStoreReader.cacheDirectory(context), captureName(isVideo))
         val uri =
@@ -324,6 +364,87 @@ class BrowseFilesFlutterPlugin :
             clearCapture()
             result.error(PERMISSION_DENIED, error.message ?: "The camera may not be opened.", null)
         }
+    }
+
+    /**
+     * Reports whether the camera may be opened, prompting for CAMERA first if the host app
+     * declares it and the user has not answered yet.
+     *
+     * The plugin itself declares no CAMERA permission — the capture intent needs none — but
+     * once the host manifest declares it, the intent refuses to start until it is granted.
+     * Without the declaration there is nothing to ask for and the answer is `granted`.
+     */
+    private fun requestCameraPermission(result: Result) {
+        val activity = activity
+        if (activity == null) {
+            result.error(UNSUPPORTED, "Asking for the camera needs a foreground activity.", null)
+            return
+        }
+        if (pendingPermission != null) {
+            result.error(UNKNOWN, "The camera permission prompt is already open.", null)
+            return
+        }
+        ensureCameraPermission(activity) { status -> result.success(status) }
+    }
+
+    private fun ensureCameraPermission(activity: Activity, onStatus: (String) -> Unit) {
+        if (!declaresCameraPermission(activity)) {
+            onStatus(GRANTED)
+            return
+        }
+        if (
+            ContextCompat.checkSelfPermission(activity, Manifest.permission.CAMERA) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            onStatus(GRANTED)
+            return
+        }
+        pendingPermission = onStatus
+        ActivityCompat.requestPermissions(
+            activity,
+            arrayOf(Manifest.permission.CAMERA),
+            PERMISSION_REQUEST_CODE
+        )
+    }
+
+    /** Whether the host app's merged manifest lists `CAMERA` at all. */
+    private fun declaresCameraPermission(context: Context): Boolean {
+        val declared =
+            try {
+                context.packageManager
+                    .getPackageInfo(context.packageName, PackageManager.GET_PERMISSIONS)
+                    .requestedPermissions
+            } catch (error: PackageManager.NameNotFoundException) {
+                null
+            }
+        return declared?.contains(Manifest.permission.CAMERA) == true
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ): Boolean {
+        if (requestCode != PERMISSION_REQUEST_CODE) return false
+        val onStatus = pendingPermission ?: return true
+        pendingPermission = null
+        val granted =
+            grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED
+        val status =
+            when {
+                granted -> GRANTED
+                // No rationale to show after a refusal means "don't ask again" (or a
+                // policy): only Settings can turn it back on.
+                activity?.let {
+                    ActivityCompat.shouldShowRequestPermissionRationale(
+                        it,
+                        Manifest.permission.CAMERA
+                    )
+                } == true -> DENIED
+                else -> PERMANENTLY_DENIED
+            }
+        onStatus(status)
+        return true
     }
 
     private fun captureName(isVideo: Boolean): String =
@@ -501,6 +622,12 @@ class BrowseFilesFlutterPlugin :
         const val MEDIA_REQUEST_CODE = 0xBF19
         const val DOCUMENT_REQUEST_CODE = 0xBF18
         const val CAPTURE_REQUEST_CODE = 0xBF17
+        const val PERMISSION_REQUEST_CODE = 0xBF16
+
+        // OCCameraPermission on the Dart side.
+        const val GRANTED = "granted"
+        const val DENIED = "denied"
+        const val PERMANENTLY_DENIED = "permanentlyDenied"
 
         /** Matches the authority declared in the plugin manifest. */
         const val PROVIDER_SUFFIX = ".browse_files_flutter.provider"

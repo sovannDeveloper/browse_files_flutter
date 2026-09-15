@@ -202,6 +202,7 @@ class _OCMediaGridState extends State<OCMediaGrid> {
     });
     final OCMediaItem? item;
     try {
+      await ensureCameraPermission(_platform, type, _options.text);
       item = await _platform.captureMedia(type: type);
     } catch (error) {
       _fail(error, camera: true);

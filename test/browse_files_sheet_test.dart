@@ -402,6 +402,38 @@ void main() {
     expect(find.text(platform.strings.galleryEmptyActionLabel), findsOneWidget);
   });
 
+  testWidgets('the camera asks for permission before it opens', (tester) async {
+    platform.captured = _item(id: '/cache/shot.jpg', type: OCMediaType.image);
+
+    await _open(
+      tester,
+      options: const OCBrowseFilesOptions(types: {OCMediaType.image}),
+    );
+    await tester.tap(find.byIcon(Icons.photo_camera_outlined));
+    await tester.pumpAndSettle();
+
+    expect(platform.permissionRequests, <OCMediaType>[OCMediaType.image]);
+    expect(platform.captures, <OCMediaType>[OCMediaType.image]);
+  });
+
+  testWidgets('a refused camera never opens and says why', (tester) async {
+    platform.cameraPermission = OCCameraPermission.permanentlyDenied;
+    platform.captured = _item(id: '/cache/shot.jpg', type: OCMediaType.image);
+
+    await _open(
+      tester,
+      options: const OCBrowseFilesOptions(types: {OCMediaType.video}),
+    );
+    await tester.tap(find.byIcon(Icons.photo_camera_outlined));
+    await tester.pumpAndSettle();
+
+    expect(platform.permissionRequests, <OCMediaType>[OCMediaType.video]);
+    expect(platform.captures, isEmpty);
+    expect(find.byType(OCMediaTile), findsNothing);
+    expect(find.text(platform.strings.cameraErrorTitle), findsOneWidget);
+    expect(find.text(platform.strings.cameraPermissionDenied), findsOneWidget);
+  });
+
   testWidgets('onCameraTap still overrides the built-in camera', (
     tester,
   ) async {
@@ -453,6 +485,43 @@ void main() {
 
       expect(platform.captures, <OCMediaType>[OCMediaType.image]);
       expect(harness.result?.media.single.id, '/cache/shot.jpg');
+    });
+
+    testWidgets('the camera rows ask for permission first', (tester) async {
+      platform.captured = _item(id: '/cache/clip.mp4', type: OCMediaType.video);
+
+      await _openActions(tester);
+      await tester.tap(find.text(platform.strings.recordVideoLabel));
+      await tester.pumpAndSettle();
+
+      expect(platform.permissionRequests, <OCMediaType>[OCMediaType.video]);
+      expect(platform.captures, <OCMediaType>[OCMediaType.video]);
+    });
+
+    testWidgets('a refused camera throws permissionDenied', (tester) async {
+      platform.cameraPermission = OCCameraPermission.denied;
+      platform.captured = _item(id: '/cache/shot.jpg', type: OCMediaType.image);
+
+      final harness = await _openActions(tester);
+      await tester.tap(find.text(platform.strings.takePhotoLabel));
+      await tester.pumpAndSettle();
+
+      expect(platform.captures, isEmpty);
+      expect(harness.result, isNull);
+      expect(
+        harness.error,
+        isA<OCBrowseFilesException>()
+            .having(
+              (error) => error.code,
+              'code',
+              OCBrowseFilesErrorCode.permissionDenied,
+            )
+            .having(
+              (error) => error.message,
+              'message',
+              platform.strings.cameraPermissionDenied,
+            ),
+      );
     });
 
     testWidgets('the files row returns cached paths', (tester) async {
@@ -671,10 +740,14 @@ Future<_Harness> _openActions(
         body: Builder(
           builder: (context) => TextButton(
             onPressed: () async {
-              harness.result = await OCBrowseFiles.showActions(
-                context,
-                options: options,
-              );
+              try {
+                harness.result = await OCBrowseFiles.showActions(
+                  context,
+                  options: options,
+                );
+              } on OCBrowseFilesException catch (error) {
+                harness.error = error;
+              }
             },
             child: const Text('open menu'),
           ),
@@ -689,6 +762,7 @@ Future<_Harness> _openActions(
 
 class _Harness {
   OCBrowseFilesResult? result;
+  OCBrowseFilesException? error;
 }
 
 /// A phone-shaped window: the default 800x600 makes each of three columns
@@ -723,6 +797,12 @@ class _FakePlatform extends OCBrowseFilesFlutterPlatform {
 
   /// The kinds the camera was opened for, in order.
   final List<OCMediaType> captures = <OCMediaType>[];
+
+  /// What the camera permission prompt answers.
+  OCCameraPermission cameraPermission = OCCameraPermission.granted;
+
+  /// The kinds the camera permission was asked for, in order.
+  final List<OCMediaType> permissionRequests = <OCMediaType>[];
 
   final List<String> thumbnailRequests = <String>[];
 
@@ -769,5 +849,13 @@ class _FakePlatform extends OCBrowseFilesFlutterPlatform {
   }) async {
     captures.add(type);
     return captured;
+  }
+
+  @override
+  Future<OCCameraPermission> requestCameraPermission({
+    OCMediaType type = OCMediaType.image,
+  }) async {
+    permissionRequests.add(type);
+    return cameraPermission;
   }
 }

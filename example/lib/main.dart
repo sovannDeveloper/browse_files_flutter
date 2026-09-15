@@ -209,6 +209,18 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
+  /// Asks for the camera without opening it — what the sheet does first.
+  Future<void> _requestCamera(OCMediaType type) async {
+    final status = await _run(
+      'requestCameraPermission(${type.name})',
+      () => _plugin.requestCameraPermission(type: type),
+    );
+    if (status == null || !mounted) return;
+    setState(() {
+      _results['requestCameraPermission(${type.name})'] = status.name;
+    });
+  }
+
   String _describeResult(OCBrowseFilesResult? result) => switch (result) {
     null => 'dismissed',
     final picked when picked.isEmpty => 'confirmed with nothing',
@@ -286,6 +298,13 @@ class _HomePageState extends State<HomePage> {
                       : () => _capture(OCMediaType.video),
                   icon: const Icon(Icons.videocam_outlined, size: 18),
                   label: const Text('captureMedia(video)'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _running
+                      ? null
+                      : () => _requestCamera(OCMediaType.video),
+                  icon: const Icon(Icons.lock_open_outlined, size: 18),
+                  label: const Text('requestCameraPermission(video)'),
                 ),
                 OutlinedButton.icon(
                   onPressed: _running ? null : _probeThumbnail,

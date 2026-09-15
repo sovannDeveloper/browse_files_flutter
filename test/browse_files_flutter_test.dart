@@ -85,6 +85,14 @@ class FakeBrowseFilesPlatform
       createdAt: DateTime(2026, 1, 3),
     );
   }
+
+  @override
+  Future<OCCameraPermission> requestCameraPermission({
+    OCMediaType type = OCMediaType.image,
+  }) async {
+    calls['requestCameraPermission'] = type;
+    return OCCameraPermission.granted;
+  }
 }
 
 void main() {
@@ -125,6 +133,19 @@ void main() {
 
       await plugin.captureMedia();
       expect(platform.calls['captureMedia'], OCMediaType.image);
+    });
+
+    test('requestCameraPermission passes the kind through', () async {
+      final plugin = OCBrowseFilesFlutter.instance;
+
+      expect(
+        await plugin.requestCameraPermission(type: OCMediaType.video),
+        OCCameraPermission.granted,
+      );
+      expect(platform.calls['requestCameraPermission'], OCMediaType.video);
+
+      await plugin.requestCameraPermission();
+      expect(platform.calls['requestCameraPermission'], OCMediaType.image);
     });
 
     test('passes pickMedia arguments through unchanged', () async {

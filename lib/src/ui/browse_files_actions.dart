@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../browse_files_flutter_platform_interface.dart';
 import '../models/browse_files_action.dart';
+import '../models/browse_files_exception.dart';
 import '../models/browse_files_options.dart';
 import '../models/browse_files_result.dart';
 import '../models/browse_files_strings.dart';
@@ -142,11 +143,11 @@ Future<OCBrowseFilesResult> runBrowseFilesAction(
   switch (action) {
     case OCBrowseFilesAction.takePhoto:
     case OCBrowseFilesAction.recordVideo:
-      final item = await api.captureMedia(
-        type: action == OCBrowseFilesAction.takePhoto
-            ? OCMediaType.image
-            : OCMediaType.video,
-      );
+      final type = action == OCBrowseFilesAction.takePhoto
+          ? OCMediaType.image
+          : OCMediaType.video;
+      await ensureCameraPermission(api, type, options.text);
+      final item = await api.captureMedia(type: type);
       return item == null
           ? OCBrowseFilesResult.empty
           : OCBrowseFilesResult(media: <OCMediaItem>[item]);
@@ -169,5 +170,26 @@ Future<OCBrowseFilesResult> runBrowseFilesAction(
       return OCBrowseFilesResult(
         documents: List<String>.unmodifiable(paths.take(options.maxSelection)),
       );
+  }
+}
+
+/// Asks for the camera before it is opened, and throws `permissionDenied`
+/// when the user refused — so a refused camera is a message, not a dead tap
+/// or a black preview.
+///
+/// Anything else the platform reports (a missing purpose string, no
+/// activity) propagates as it is.
+Future<void> ensureCameraPermission(
+  OCBrowseFilesFlutterPlatform api,
+  OCMediaType type,
+  OCBrowseFilesStrings strings,
+) async {
+  final status = await api.requestCameraPermission(type: type);
+  if (!status.isGranted) {
+    throw OCBrowseFilesException(
+      OCBrowseFilesErrorCode.permissionDenied,
+      strings.cameraPermissionDenied,
+      details: status.name,
+    );
   }
 }

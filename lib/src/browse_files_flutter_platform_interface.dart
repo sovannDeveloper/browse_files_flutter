@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 
 import 'browse_files_flutter_method_channel.dart';
+import 'models/camera_permission.dart';
 import 'models/media_item.dart';
 import 'models/media_type.dart';
 
@@ -113,5 +114,25 @@ abstract class OCBrowseFilesFlutterPlatform extends PlatformInterface {
   /// app when the camera opens.
   Future<OCMediaItem?> captureMedia({OCMediaType type = OCMediaType.image}) {
     throw UnimplementedError('captureMedia() has not been implemented.');
+  }
+
+  /// Makes sure the camera may be opened for [type], prompting the user if
+  /// the platform has not asked yet, and reports where that left things.
+  ///
+  /// Android: the capture intent needs no permission unless the host app
+  /// declares `CAMERA` in its own manifest — then the intent refuses to start
+  /// until it is granted, so this checks and requests it. Without the
+  /// declaration the answer is [OCCameraPermission.granted] straight away.
+  /// iOS: `AVCaptureDevice` authorization for the camera, plus the
+  /// microphone for video (a refused microphone does not block; the clip is
+  /// silent). A missing `NSCameraUsageDescription` /
+  /// `NSMicrophoneUsageDescription` fails with `unsupported`, the same as
+  /// [captureMedia], rather than letting iOS kill the app.
+  Future<OCCameraPermission> requestCameraPermission({
+    OCMediaType type = OCMediaType.image,
+  }) {
+    throw UnimplementedError(
+      'requestCameraPermission() has not been implemented.',
+    );
   }
 }

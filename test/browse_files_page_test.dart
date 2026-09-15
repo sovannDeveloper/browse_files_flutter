@@ -218,4 +218,9 @@ class _FakePlatform extends OCBrowseFilesFlutterPlatform {
     pickedWith = mimeTypes;
     return documents;
   }
+
+  @override
+  Future<OCCameraPermission> requestCameraPermission({
+    OCMediaType type = OCMediaType.image,
+  }) async => OCCameraPermission.granted;
 }
