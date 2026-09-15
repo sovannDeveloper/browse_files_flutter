@@ -83,6 +83,9 @@ public class BrowseFilesFlutterPlugin: NSObject, FlutterPlugin {
       var configuration = PHPickerConfiguration()
       configuration.selectionLimit = allowMultiple ? 0 : 1
       configuration.filter = Self.pickerFilter(for: types)
+      // The file as it is, not a transcode: `.automatic` can spend a minute re-encoding a
+      // long clip before the delegate ever hears about it.
+      configuration.preferredAssetRepresentationMode = .current
       let picker = PHPickerViewController(configuration: configuration)
       picker.delegate = self
       host.present(picker, animated: true)

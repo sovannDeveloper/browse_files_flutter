@@ -186,6 +186,18 @@ void main() {
     expect(find.byType(OCMediaTile), findsOneWidget);
   });
 
+  testWidgets('a single cap forces the document picker into single-pick mode', (
+    tester,
+  ) async {
+    await _open(tester, options: const OCBrowseFilesOptions(maxSelection: 1));
+    await tester.tap(find.text('File'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Internal Storage'));
+    await tester.pumpAndSettle();
+
+    expect(platform.lastDocumentsAllowMultiple, isFalse);
+  });
+
   testWidgets('the File tab hands back cached document paths', (tester) async {
     platform.documents = <String>['/cache/report.pdf', '/cache/notes.txt'];
 
@@ -703,6 +715,7 @@ class _FakePlatform extends OCBrowseFilesFlutterPlatform {
 
   int picks = 0;
   bool? lastAllowMultiple;
+  bool? lastDocumentsAllowMultiple;
   Set<OCMediaType>? lastTypes;
 
   /// What the camera hands back; `null` is the user backing out.
@@ -745,7 +758,10 @@ class _FakePlatform extends OCBrowseFilesFlutterPlatform {
   Future<List<String>> pickDocuments({
     List<String> mimeTypes = const <String>[],
     bool allowMultiple = true,
-  }) async => documents;
+  }) async {
+    lastDocumentsAllowMultiple = allowMultiple;
+    return documents;
+  }
 
   @override
   Future<OCMediaItem?> captureMedia({

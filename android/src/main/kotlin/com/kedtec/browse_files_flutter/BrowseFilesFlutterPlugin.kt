@@ -5,6 +5,7 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.provider.MediaStore
 import androidx.core.content.FileProvider
 import io.flutter.embedding.engine.plugins.FlutterPlugin
@@ -55,9 +56,8 @@ class BrowseFilesFlutterPlugin :
     private var activity: Activity? = null
     private var activityBinding: ActivityPluginBinding? = null
 
-    /** The reply waiting on the system media picker, with the max it was told to allow. */
+    /** The reply waiting on the system media picker. */
     private var pendingMedia: Result? = null
-    private var mediaMaxSelection: Int = 0
 
     /** The reply waiting on the system document picker. */
     private var pendingDocuments: Result? = null
@@ -161,7 +161,6 @@ class BrowseFilesFlutterPlugin :
             return
         }
         pendingMedia = result
-        mediaMaxSelection = callMaxSelection() ?: 0
         try {
             activity.startActivityForResult(pickerIntent(types, allowMultiple), MEDIA_REQUEST_CODE)
         } catch (error: ActivityNotFoundException) {
@@ -173,13 +172,18 @@ class BrowseFilesFlutterPlugin :
     private fun pickerIntent(types: Set<String>, allowMultiple: Boolean): Intent {
         val mimeTypes = mimeTypesOf(types)
         val intent =
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                Intent(MediaPickerAction.ACTION_PICK_IMAGES).apply {
-                    putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes)
-                    if (allowMultiple) {
-                        putExtra(MediaPickerAction.EXTRA_ALLOW_MULTIPLE, true)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                Intent(MediaStore.ACTION_PICK_IMAGES).apply {
+                    // The Photo Picker filters on `type`, one family at a time; it only learnt
+                    // EXTRA_MIME_TYPES with Android 14. Left unset it shows photos and videos.
+                    if (mimeTypes.size == 1 && mimeTypes.first() != "*/*") {
+                        type = mimeTypes.first()
                     }
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    // Multi-select is a count, not a flag: without EXTRA_PICK_IMAGES_MAX the
+                    // picker allows exactly one item.
+                    if (allowMultiple) {
+                        putExtra(MediaStore.EXTRA_PICK_IMAGES_MAX, MediaStore.getPickImagesMaxLimit())
+                    }
                 }
             } else {
                 Intent(Intent.ACTION_GET_CONTENT).apply {
@@ -393,11 +397,9 @@ class BrowseFilesFlutterPlugin :
             return true
         }
         val uris = collectUris(data)
-        val maxSelection = mediaMaxSelection
-        val limited = if (maxSelection > 0) uris.take(maxSelection) else uris
         worker.execute {
             val described =
-                limited.mapNotNull { uri ->
+                uris.mapNotNull { uri ->
                     runCatching { MediaStoreReader.describe(context, uri) }.getOrNull()
                 }
             main.post { result.success(described) }
@@ -436,12 +438,9 @@ class BrowseFilesFlutterPlugin :
     private fun collectUris(data: Intent): List<Uri> {
         val uris = LinkedHashSet<Uri>()
         data.clipData?.let { clip ->
-            if (clip.itemCount > 1) {
-                for (index in 0 until clip.itemCount) {
-                    uris.add(clip.getItemAt(index).uri)
-                }
-            } else {
-                clip.getItemAt(0)?.uri?.let { uris.add(it) }
+            // Not `getItemAt(0)` unguarded: an empty ClipData throws on it.
+            for (index in 0 until clip.itemCount) {
+                clip.getItemAt(index).uri?.let { uris.add(it) }
             }
         }
         data.data?.let { uris.add(it) }
@@ -497,8 +496,6 @@ class BrowseFilesFlutterPlugin :
     private fun allowMultipleOf(call: MethodCall): Boolean =
         call.argument<Boolean>("allowMultiple") ?: true
 
-    private fun callMaxSelection(): Int? = null
-
     private companion object {
         const val CHANNEL = "com.kedtec.browse_files_flutter/methods"
         const val MEDIA_REQUEST_CODE = 0xBF19
@@ -518,18 +515,5 @@ class BrowseFilesFlutterPlugin :
         const val IO_ERROR = "ioError"
         const val UNSUPPORTED = "unsupported"
         const val UNKNOWN = "unknown"
-    }
-
-    /**
-     * The action and extra names for the system Photo Picker, so they are not
-     * pasted as string literals across the file.
-     *
-     * The constants live in the framework on API 33+; spelling them out here
-     * keeps the file readable and lets the compiler point at the call site if
-     * Google renames one.
-     */
-    private object MediaPickerAction {
-        const val ACTION_PICK_IMAGES = "android.provider.action.PICK_IMAGES"
-        const val EXTRA_ALLOW_MULTIPLE = "android.provider.extra.ACCEPT_MULTIPLE"
     }
 }

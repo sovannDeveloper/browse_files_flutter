@@ -75,6 +75,10 @@ class _HomePageState extends State<HomePage> {
       outcome = '$value';
     } on OCBrowseFilesException catch (error) {
       outcome = '${error.code.name}: ${error.message}';
+    } catch (error) {
+      // A programmer error (an ArgumentError, say) is still an outcome to
+      // show — and the buttons must come back either way.
+      outcome = 'error: $error';
     }
     if (!mounted) return value;
     setState(() {

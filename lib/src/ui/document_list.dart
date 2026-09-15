@@ -74,7 +74,11 @@ class _OCDocumentListState extends State<OCDocumentList> {
     try {
       paths = await _platform.pickDocuments(
         mimeTypes: widget.options.documentMimeTypes,
-        allowMultiple: widget.options.allowMultipleDocuments,
+        // A cap of one is a single pick, like the gallery: letting the picker
+        // multi-select and then keeping only the first would be a surprise.
+        allowMultiple:
+            widget.options.allowMultipleDocuments &&
+            widget.options.maxSelection > 1,
       );
     } on OCBrowseFilesException catch (error) {
       if (!mounted) return;

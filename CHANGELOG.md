@@ -1,3 +1,22 @@
+## 0.1.1
+
+* Android 13+: the Photo Picker allows more than one item again. Multi-select was requested
+  through an extra the picker does not know; it now sends `EXTRA_PICK_IMAGES_MAX`. A single
+  media kind is filtered through the intent `type`, which Android 13's picker honours where it
+  ignored `EXTRA_MIME_TYPES`.
+* Android: picked videos carry their duration, so the tile badge no longer reads `0:00`. Item
+  metadata is read in one best-effort query — a provider without a width or date column no
+  longer drops the item from the result.
+* Android: cache copies never overwrite; a second file of the same name lands as `name (1).ext`,
+  as on iOS and as documented. A copy that fails midway is deleted rather than handed back.
+* Android below 10, and any provider without thumbnails of its own: thumbnails are decoded
+  sub-sampled to the tile and turned upright, instead of the whole photo being inflated in
+  memory; videos get a frame.
+* iOS: `PHPicker` hands over the file as it is (`.current`) rather than transcoding a long clip
+  first.
+* The sheet's File tab opens the document picker in single-pick mode when `maxSelection` is
+  `1`, as the gallery already did.
+
 ## 0.1.0
 
 * `captureMedia(type:)`: the system camera, for a photo or a video. Android runs
