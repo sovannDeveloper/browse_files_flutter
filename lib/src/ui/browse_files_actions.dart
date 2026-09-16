@@ -134,6 +134,11 @@ class _ActionRow extends StatelessWidget {
 /// the files row to cached paths. A picker the user backed out of is
 /// [OCBrowseFilesResult.empty], not an error. Platform failures propagate as
 /// `OCBrowseFilesException` — there is no sheet left to show them in.
+///
+/// A host camera ([OCBrowseFilesOptions.onCameraTap]) replaces the built-in
+/// one here as it does on the sheet's tile: the callback runs and the result
+/// is [OCBrowseFilesResult.empty], since whatever it captured never passes
+/// through the plugin.
 Future<OCBrowseFilesResult> runBrowseFilesAction(
   OCBrowseFilesAction action,
   OCBrowseFilesOptions options, {
@@ -143,6 +148,11 @@ Future<OCBrowseFilesResult> runBrowseFilesAction(
   switch (action) {
     case OCBrowseFilesAction.takePhoto:
     case OCBrowseFilesAction.recordVideo:
+      final custom = options.onCameraTap;
+      if (custom != null) {
+        custom();
+        return OCBrowseFilesResult.empty;
+      }
       final type = action == OCBrowseFilesAction.takePhoto
           ? OCMediaType.image
           : OCMediaType.video;

@@ -123,9 +123,11 @@ class OCBrowseFilesOptions {
 
   /// Replaces the built-in camera with the host app's own.
   ///
-  /// When set, tapping the camera tile calls this instead of `captureMedia`
-  /// and the host app is expected to open whatever camera it already uses.
-  /// Ignored when [showCamera] is false.
+  /// When set, tapping the camera tile — or a camera row of
+  /// `OCBrowseFiles.showActions` — calls this instead of `captureMedia` and
+  /// the host app is expected to open whatever camera it already uses. The
+  /// menu then resolves to `OCBrowseFilesResult.empty`, as nothing the host
+  /// captured passes through the plugin. Ignored when [showCamera] is false.
   final VoidCallback? onCameraTap;
 
   /// Which kinds the built-in camera can capture, in the order they are

@@ -1,3 +1,10 @@
+## 0.1.3
+
+* `OCBrowseFiles.showActions`: the photo and video rows now honour
+  `OCBrowseFilesOptions.onCameraTap` like the sheet's camera tile does — the host camera
+  runs after the menu closes and the call resolves to `OCBrowseFilesResult.empty`. They used
+  to open the system camera regardless of the callback.
+
 ## 0.1.2
 
 * `requestCameraPermission(type:)`: checks — and prompts for — camera access without opening

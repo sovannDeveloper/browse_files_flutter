@@ -487,6 +487,23 @@ void main() {
       expect(harness.result?.media.single.id, '/cache/shot.jpg');
     });
 
+    testWidgets('the camera rows hand off to onCameraTap', (tester) async {
+      var cameraTaps = 0;
+      platform.captured = _item(id: '/cache/shot.jpg', type: OCMediaType.image);
+
+      final harness = await _openActions(
+        tester,
+        options: OCBrowseFilesOptions(onCameraTap: () => cameraTaps++),
+      );
+      await tester.tap(find.text(platform.strings.takePhotoLabel));
+      await tester.pumpAndSettle();
+
+      expect(cameraTaps, 1);
+      expect(platform.permissionRequests, isEmpty);
+      expect(platform.captures, isEmpty);
+      expect(harness.result, OCBrowseFilesResult.empty);
+    });
+
     testWidgets('the camera rows ask for permission first', (tester) async {
       platform.captured = _item(id: '/cache/clip.mp4', type: OCMediaType.video);
 
