@@ -1,6 +1,6 @@
 name: browse_files_flutter
 description: "A Telegram-style attachment bottom sheet for Flutter: browse device photos, videos and documents in a draggable sheet with ordered multi-selection."
-version: 0.1.3
+version: 0.1.4
 homepage: https://github.com/kedtec/browse_files_flutter
 repository: https://github.com/kedtec/browse_files_flutter
 publish_to: none

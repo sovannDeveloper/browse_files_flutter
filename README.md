@@ -67,8 +67,22 @@ if (result != null && result.isNotEmpty) {
 
 `result` is `OCBrowseFilesResult.empty` when the user opened the camera or a picker and backed
 out, and `null` when they dismissed the menu. Pick the rows with `actions:`; by default the camera
-rows follow `OCBrowseFilesOptions.types`. A platform failure is thrown as `OCBrowseFilesException`
-— there is no sheet left to show it in.
+rows follow `OCBrowseFilesOptions.types`. A row keeps the wording in `OCBrowseFilesStrings` unless
+you give it its own with `withLabel` (and `withIcon` for the glyph):
+
+```dart
+final result = await OCBrowseFiles.showActions(
+  context,
+  actions: [
+    OCBrowseFilesAction.takePhoto.withLabel('Camera'),
+    OCBrowseFilesAction.recordVideo,
+    OCBrowseFilesAction.gallery.withLabel('Photos'),
+    OCBrowseFilesAction.files.withLabel('Documents'),
+  ],
+);
+```
+
+A platform failure is thrown as `OCBrowseFilesException` — there is no sheet left to show it in.
 
 ### The sheet
 

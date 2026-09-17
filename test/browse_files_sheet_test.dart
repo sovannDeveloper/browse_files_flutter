@@ -476,6 +476,28 @@ void main() {
       expect(harness.result?.media.map((item) => item.id), ['a', 'b']);
     });
 
+    testWidgets('a row can carry its own label and still run', (tester) async {
+      platform.picked = <OCMediaItem>[_item(id: 'a', type: OCMediaType.image)];
+
+      final harness = await _openActions(
+        tester,
+        actions: <OCBrowseFilesAction>[
+          OCBrowseFilesAction.gallery.withLabel('Photos'),
+          OCBrowseFilesAction.files,
+        ],
+      );
+      expect(find.text('Photos'), findsOneWidget);
+      expect(find.text(platform.strings.selectMediaLabel), findsNothing);
+      expect(find.text(platform.strings.takePhotoLabel), findsNothing);
+      expect(find.text(platform.strings.selectFilesLabel), findsOneWidget);
+
+      await tester.tap(find.text('Photos'));
+      await tester.pumpAndSettle();
+
+      expect(platform.picks, 1);
+      expect(harness.result?.media.single.id, 'a');
+    });
+
     testWidgets('the camera rows capture one item', (tester) async {
       platform.captured = _item(id: '/cache/shot.jpg', type: OCMediaType.image);
 
@@ -748,6 +770,7 @@ Future<_Harness> _open(
 Future<_Harness> _openActions(
   WidgetTester tester, {
   OCBrowseFilesOptions options = const OCBrowseFilesOptions(),
+  List<OCBrowseFilesAction>? actions,
 }) async {
   final harness = _Harness();
   _usePhoneViewport(tester);
@@ -761,6 +784,7 @@ Future<_Harness> _openActions(
                 harness.result = await OCBrowseFiles.showActions(
                   context,
                   options: options,
+                  actions: actions,
                 );
               } on OCBrowseFilesException catch (error) {
                 harness.error = error;

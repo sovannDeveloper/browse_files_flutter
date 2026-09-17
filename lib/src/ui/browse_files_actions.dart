@@ -13,6 +13,10 @@ import 'sheet_theme.dart';
 /// The short attachment menu: take a photo, record a video, select photos &
 /// videos, select files.
 ///
+/// A row's text is [OCBrowseFilesAction.label] when set — see
+/// [OCBrowseFilesAction.withLabel] — and the matching [OCBrowseFilesStrings]
+/// entry otherwise.
+///
 /// A row does not do its work in place — the sheet pops with the chosen
 /// [OCBrowseFilesAction] and the caller runs it through [runBrowseFilesAction]
 /// once the sheet is gone, so the system camera or picker never opens
@@ -69,8 +73,8 @@ class OCBrowseFilesActionsSheet extends StatelessWidget {
               for (final action in rows)
                 _ActionRow(
                   key: ValueKey<OCBrowseFilesAction>(action),
-                  icon: _iconOf(action),
-                  label: _labelOf(action, strings),
+                  icon: action.icon,
+                  label: action.labelFor(strings),
                   onTap: () => Navigator.of(context).pop(action),
                 ),
               const SizedBox(height: 8),
@@ -80,23 +84,6 @@ class OCBrowseFilesActionsSheet extends StatelessWidget {
       ),
     );
   }
-
-  static IconData _iconOf(OCBrowseFilesAction action) => switch (action) {
-    OCBrowseFilesAction.takePhoto => Icons.photo_camera_outlined,
-    OCBrowseFilesAction.recordVideo => Icons.videocam_outlined,
-    OCBrowseFilesAction.gallery => Icons.photo_library_outlined,
-    OCBrowseFilesAction.files => Icons.insert_drive_file_outlined,
-  };
-
-  static String _labelOf(
-    OCBrowseFilesAction action,
-    OCBrowseFilesStrings strings,
-  ) => switch (action) {
-    OCBrowseFilesAction.takePhoto => strings.takePhotoLabel,
-    OCBrowseFilesAction.recordVideo => strings.recordVideoLabel,
-    OCBrowseFilesAction.gallery => strings.selectMediaLabel,
-    OCBrowseFilesAction.files => strings.selectFilesLabel,
-  };
 }
 
 class _ActionRow extends StatelessWidget {
@@ -145,15 +132,15 @@ Future<OCBrowseFilesResult> runBrowseFilesAction(
   OCBrowseFilesFlutterPlatform? platform,
 }) async {
   final api = platform ?? OCBrowseFilesFlutterPlatform.instance;
-  switch (action) {
-    case OCBrowseFilesAction.takePhoto:
-    case OCBrowseFilesAction.recordVideo:
+  switch (action.kind) {
+    case OCBrowseFilesActionKind.takePhoto:
+    case OCBrowseFilesActionKind.recordVideo:
       final custom = options.onCameraTap;
       if (custom != null) {
         custom();
         return OCBrowseFilesResult.empty;
       }
-      final type = action == OCBrowseFilesAction.takePhoto
+      final type = action.kind == OCBrowseFilesActionKind.takePhoto
           ? OCMediaType.image
           : OCMediaType.video;
       await ensureCameraPermission(api, type, options.text);
@@ -161,7 +148,7 @@ Future<OCBrowseFilesResult> runBrowseFilesAction(
       return item == null
           ? OCBrowseFilesResult.empty
           : OCBrowseFilesResult(media: <OCMediaItem>[item]);
-    case OCBrowseFilesAction.gallery:
+    case OCBrowseFilesActionKind.gallery:
       final picked = await api.pickMedia(
         types: options.types.isEmpty ? kAllMediaTypes : options.types,
         allowMultiple: options.allowMultipleMedia && options.maxSelection > 1,
@@ -171,7 +158,7 @@ Future<OCBrowseFilesResult> runBrowseFilesAction(
           picked.take(options.maxSelection),
         ),
       );
-    case OCBrowseFilesAction.files:
+    case OCBrowseFilesActionKind.files:
       final paths = await api.pickDocuments(
         mimeTypes: options.documentMimeTypes,
         allowMultiple:

@@ -1,3 +1,12 @@
+## 0.1.4
+
+* `OCBrowseFilesAction` rows can carry their own text and glyph:
+  `OCBrowseFilesAction.gallery.withLabel('Photos')`, `.withIcon(...)`. A row's label wins over
+  the matching `OCBrowseFilesStrings` entry; rows without one still read the strings.
+* `OCBrowseFilesAction` is now an immutable class rather than an enum. The four constants keep
+  their names; code that switched over the enum switches over `action.kind`
+  (`OCBrowseFilesActionKind`) instead.
+
 ## 0.1.3
 
 * `OCBrowseFiles.showActions`: the photo and video rows now honour
